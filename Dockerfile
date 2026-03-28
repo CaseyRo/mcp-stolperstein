@@ -22,6 +22,7 @@ COPY --from=builder /app/src ./src
 # Create non-root user
 RUN addgroup --system mcp && adduser --system --ingroup mcp mcp && \
     mkdir -p /data && chown mcp:mcp /data && \
+    mkdir -p /home/mcp/.cache && \
     mv /root/.cache/huggingface /home/mcp/.cache/huggingface && \
     chown -R mcp:mcp /home/mcp/.cache
 

@@ -1,0 +1,20 @@
+[[stack]]
+name = "git-mcp-stolperstein"
+description = "Stolperstein — Experiential knowledge capture MCP server"
+deploy = true
+tags = ["mcp"]
+
+[stack.config]
+server_id = "ubuntu-smurf-mirror"
+git_provider = "github.com"
+repo = "CaseyRo/stolpersteine"
+branch = "main"
+environment = """
+MCP_STOLPERSTEIN_API_KEY = [[MCP_STOLPERSTEIN_API_KEY]]
+MCP_STOLPERSTEIN_PUBLIC_URL = https://mcp-stolperstein.cdit-dev.de
+KEYCLOAK_ISSUER = https://auth.cdit-works.de/realms/cdit-mcp
+KEYCLOAK_AUDIENCE = mcp-stolperstein
+CQ_SIYUAN_URL = http://siyuan:6806
+CQ_SIYUAN_TOKEN = [[CQ_SIYUAN_TOKEN]]
+CQ_SIYUAN_NOTEBOOK = Stolpersteine
+"""

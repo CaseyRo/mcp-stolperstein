@@ -1,0 +1,27 @@
+services:
+  mcp-stolperstein:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "8716:8716"
+    environment:
+      - TRANSPORT=http
+      - HOST=0.0.0.0
+      - PORT=8716
+      - CQ_LOCAL_DB_PATH=/data/stolperstein.db
+      - MCP_STOLPERSTEIN_API_KEY=${MCP_STOLPERSTEIN_API_KEY:-}
+      - MCP_STOLPERSTEIN_PUBLIC_URL=${MCP_STOLPERSTEIN_PUBLIC_URL:-https://mcp-stolperstein.cdit-dev.de}
+      - KEYCLOAK_ISSUER=${KEYCLOAK_ISSUER:-https://auth.cdit-works.de/realms/cdit-mcp}
+      - KEYCLOAK_AUDIENCE=${KEYCLOAK_AUDIENCE:-mcp-stolperstein}
+      - CQ_EMBEDDING_MODEL=${CQ_EMBEDDING_MODEL:-all-MiniLM-L6-v2}
+      - CQ_EMBEDDING_API_URL=${CQ_EMBEDDING_API_URL:-}
+      - CQ_TEAM_ADDR=${CQ_TEAM_ADDR:-}
+      - CQ_TEAM_API_KEY=${CQ_TEAM_API_KEY:-}
+      - CQ_SIYUAN_URL=${CQ_SIYUAN_URL:-}
+      - CQ_SIYUAN_NOTEBOOK=${CQ_SIYUAN_NOTEBOOK:-}
+      - CQ_SIYUAN_TOKEN=${CQ_SIYUAN_TOKEN:-}
+    volumes:
+      - stolperstein-data:/data
+
+volumes:
+  stolperstein-data:

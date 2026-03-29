@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import secrets
 import sqlite3
 import struct
@@ -258,6 +259,15 @@ class KnowledgeStore:
         ku = self._row_to_ku(row)
         return KUResponse(ku=ku).model_dump(mode="json")
 
+    @staticmethod
+    def _sanitize_fts_query(text: str) -> str | None:
+        """Sanitize text for FTS5 MATCH — quote each term, join with OR."""
+        cleaned = re.sub(r"[^\w\s]", "", text)
+        terms = [t for t in cleaned.split() if t.strip()]
+        if not terms:
+            return None
+        return " OR ".join(f'"{t}"' for t in terms)
+
     async def query(
         self,
         text: str,
@@ -270,29 +280,30 @@ class KnowledgeStore:
         results: dict[str, dict] = {}
 
         # FTS5 keyword search
-        fts_query = text.replace('"', '""')
-        try:
-            fts_rows = db.execute(
-                """
-                SELECT ku.*, bm25(ku_fts) as rank
-                FROM ku_fts
-                JOIN knowledge_units ku ON ku.id = ku_fts.id
-                WHERE ku_fts MATCH ?
-                  AND ku.status NOT IN ('archived')
-                  AND ku.confidence >= ?
-                ORDER BY rank
-                LIMIT ?
-                """,
-                [fts_query, confidence_min, limit * 2],
-            ).fetchall()
+        fts_query = self._sanitize_fts_query(text)
+        if fts_query:
+            try:
+                fts_rows = db.execute(
+                    """
+                    SELECT ku.*, bm25(ku_fts) as rank
+                    FROM ku_fts
+                    JOIN knowledge_units ku ON ku.id = ku_fts.id
+                    WHERE ku_fts MATCH ?
+                      AND ku.status NOT IN ('archived')
+                      AND ku.confidence >= ?
+                    ORDER BY rank
+                    LIMIT ?
+                    """,
+                    [fts_query, confidence_min, limit * 2],
+                ).fetchall()
 
-            for row in fts_rows:
-                ku = self._row_to_ku(row)
-                # bm25 returns negative scores (more negative = more relevant)
-                fts_score = -row["rank"] if row["rank"] else 0.0
-                results[ku.id] = {"ku": ku, "fts_score": fts_score, "vec_score": 0.0}
-        except Exception:
-            logger.warning("FTS5 query failed", exc_info=True)
+                for row in fts_rows:
+                    ku = self._row_to_ku(row)
+                    # bm25 returns negative scores (more negative = more relevant)
+                    fts_score = -row["rank"] if row["rank"] else 0.0
+                    results[ku.id] = {"ku": ku, "fts_score": fts_score, "vec_score": 0.0}
+            except Exception:
+                logger.warning("FTS5 query failed for: %s", fts_query, exc_info=True)
 
         # Vector similarity search
         try:

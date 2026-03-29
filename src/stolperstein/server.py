@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from fastmcp import FastMCP
+from mcp.types import ToolAnnotations
 
 from stolperstein.auth import create_auth
 from stolperstein.config import settings
@@ -24,7 +25,7 @@ def _build_auth():
 mcp = FastMCP("mcp-stolperstein", auth=_build_auth())
 
 
-@mcp.tool
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True))
 async def query(
     text: str,
     domain: list[str] | None = None,
@@ -42,7 +43,7 @@ async def query(
     )
 
 
-@mcp.tool
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, idempotentHint=False))
 async def propose(
     summary: str,
     detail: str,
@@ -61,7 +62,7 @@ async def propose(
     )
 
 
-@mcp.tool
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, idempotentHint=True))
 async def confirm(ku_id: str) -> dict:
     """Confirm an existing Knowledge Unit — increments confidence."""
     from stolperstein.store import store
@@ -69,7 +70,7 @@ async def confirm(ku_id: str) -> dict:
     return await store.confirm(ku_id=ku_id)
 
 
-@mcp.tool
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, idempotentHint=True))
 async def flag(
     ku_id: str,
     reason: str,
@@ -84,7 +85,7 @@ async def flag(
     )
 
 
-@mcp.tool
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True))
 async def reflect(session_summary: str) -> dict:
     """Extract generalizable learnings from a session summary.
 
@@ -95,7 +96,7 @@ async def reflect(session_summary: str) -> dict:
     return {"candidates": [], "message": "Reflect not yet implemented"}
 
 
-@mcp.tool
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True))
 async def status() -> dict:
     """Report store health: KU counts, confidence distribution, staleness metrics."""
     from stolperstein.store import store

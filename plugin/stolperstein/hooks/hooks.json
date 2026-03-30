@@ -5,7 +5,7 @@
       "hooks": [
         {
           "type": "command",
-          "command": "if echo \"$TOOL_OUTPUT\" | grep -qiE '(error|failed|fatal|exception|traceback)'; then echo '{\"query\": {\"text\": \"'$(echo \"$TOOL_OUTPUT\" | head -5 | tr '\\n' ' ' | sed 's/\"/\\\\\"/g')'\", \"limit\": 3}}'; fi",
+          "command": "INPUT=$(cat); EXIT_CODE=$(echo \"$INPUT\" | jq -r '.tool_output.exit_code // \"0\"'); if [ \"$EXIT_CODE\" != \"0\" ]; then STDERR=$(echo \"$INPUT\" | jq -r '.tool_output.stderr // \"\"' | head -5 | tr '\\n' ' '); CMD=$(echo \"$INPUT\" | jq -r '.tool_input.command // \"\"' | head -1); echo \"[Stolperstein] Command failed: $CMD — Consider querying Stolperstein for known pitfalls: query(text=\\\"$STDERR\\\")\"; fi",
           "timeout": 5000
         }
       ]

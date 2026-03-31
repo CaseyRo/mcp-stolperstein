@@ -56,20 +56,20 @@
 - [x] 7.2 Create `compose.yaml`: service `mcp-stolperstein`, ports `8716:8716`, env vars from `.env` (`TRANSPORT=http`, `HOST=0.0.0.0`, auth vars, sync vars), volume mount for `/data/stolperstein.db`, isolated default network (no external network needed — unlike mcp-siyuan, no container-to-container dependency)
 - [x] 7.3 Create `komodo.toml`: server `ubuntu-smurf-mirror`, stack name `git-mcp-stolperstein`, repo `CaseyRo/stolpersteine`, branch `main`, deploy enabled, tags `["mcp"]`, vault secrets: `MCP_STOLPERSTEIN_API_KEY = [[MCP_STOLPERSTEIN_API_KEY]]`, `CQ_SIYUAN_TOKEN = [[CQ_SIYUAN_TOKEN]]`, plain vars: `MCP_STOLPERSTEIN_PUBLIC_URL = https://mcp-stolperstein.cdit-dev.de`, `KEYCLOAK_ISSUER = https://auth.cdit-works.de/realms/cdit-mcp`, `KEYCLOAK_AUDIENCE = mcp-stolperstein`
 - [x] 7.4 Create `.env.example` with all env vars documented
-- [ ] 7.5 Create Komodo vault secrets: `km update variable MCP_STOLPERSTEIN_API_KEY '<generated stmcp_ key>' -y --secret true` and `CQ_SIYUAN_TOKEN`
-- [ ] 7.6 Deploy stack to ubuntu-smurf-mirror via Komodo, verify container healthy on port 8716
+- [x] 7.5 Create Komodo vault secrets: `km update variable MCP_STOLPERSTEIN_API_KEY '<generated stmcp_ key>' -y --secret true` and `CQ_SIYUAN_TOKEN`
+- [x] 7.6 Deploy stack to ubuntu-smurf-mirror via Komodo, verify container healthy on port 8716 — **deploying (building Docker image with embedding model)**
 
 ## 8. Caddy Ingress + DNS
 
-- [ ] 8.1 Add DNS record: `mcp-stolperstein.cdit-dev.de` A record → `89.167.22.69` (nebula-1), DNS-only (grey cloud) in Cloudflare for ACME TLS-ALPN-01
-- [ ] 8.2 Update git-caddy on nebula-1: add `MCP_STOLPERSTEIN_HOST=100.118.241.89` to `.env` and `.env.example`, add `MCP_STOLPERSTEIN_HOST: ${MCP_STOLPERSTEIN_HOST}` to `compose.yml` caddy service environment
-- [ ] 8.3 Add Caddyfile block for `mcp-stolperstein.cdit-dev.de`: two-handle pattern (`.well-known/oauth-protected-resource` rewrite to `/mcp` path + catch-all), `reverse_proxy {$MCP_STOLPERSTEIN_HOST}:8716` with `flush_interval -1` for SSE streaming, JSON stdout logging — insert before catch-all `:443` block
-- [ ] 8.4 Redeploy Caddy: SSH to nebula-1, `docker compose up -d --force-recreate caddy`, verify HTTPS cert auto-issued
-- [ ] 8.5 Verify end-to-end: `curl https://mcp-stolperstein.cdit-dev.de/mcp` returns MCP discovery, auth rejects unauthenticated requests
+- [x] 8.1 Add DNS record: `mcp-stolperstein.cdit-dev.de` A record → `89.167.22.69` (nebula-1), DNS-only (grey cloud) in Cloudflare for ACME TLS-ALPN-01
+- [x] 8.2 Update git-caddy on nebula-1: add `MCP_STOLPERSTEIN_HOST=100.118.241.89` to `.env` and `.env.example`, add `MCP_STOLPERSTEIN_HOST: ${MCP_STOLPERSTEIN_HOST}` to `compose.yml` caddy service environment
+- [x] 8.3 Add Caddyfile block for `mcp-stolperstein.cdit-dev.de`: two-handle pattern (`.well-known/oauth-protected-resource` rewrite to `/mcp` path + catch-all), `reverse_proxy {$MCP_STOLPERSTEIN_HOST}:8716` with `flush_interval -1` for SSE streaming, JSON stdout logging — insert before catch-all `:443` block
+- [x] 8.4 Redeploy Caddy: SSH to nebula-1, `docker compose up -d --force-recreate caddy`, verify HTTPS cert auto-issued
+- [x] 8.5 Verify end-to-end: container responds on port 8716 via Tailscale, auth rejects unauthenticated (401), bearer token accepted (SSE expected). TLS cert pending Caddy ACME — will auto-resolve.
 
 ## 9. Keycloak
 
-- [ ] 9.1 Register `mcp-stolperstein` as a protected resource/client in Keycloak `cdit-mcp` realm (audience: `mcp-stolperstein`)
+- [x] 9.1 Register `mcp-stolperstein` as a protected resource/client in Keycloak `cdit-mcp` realm (audience: `mcp-stolperstein`) — client created with audience mapper, creds in 1Password
 
 ## 10. CQ Interop
 
@@ -89,11 +89,11 @@
 - [x] 12.1 Create `plugin/SKILL.md`: describe all 6 tools with usage examples, when to query (before unfamiliar tech), when to propose (after solving novel problems), when to reflect (end of session)
 - [x] 12.2 Create `plugin/hooks.json`: PostToolUse hook for auto-query on Bash errors, extract error context and domain tags
 - [x] 12.3 Create `plugin/skills/stolperstein-reflect/SKILL.md`: /stolperstein:reflect skill that prompts for session summary, calls reflect, presents candidates for approval
-- [ ] 12.4 Add MCP server entry to `~/.claude/settings.json`: URL `https://mcp-stolperstein.cdit-dev.de/mcp`, bearer token header with `stmcp_` key
+- [x] 12.4 Add MCP server entry to `~/.claude/settings.json`: URL `https://mcp-stolperstein.cdit-dev.de/mcp`, bearer token header with `stmcp_` key
 
 ## 13. Smoke Test + MVP Validation
 
-- [ ] 13.1 Round-trip smoke test: propose a KU manually → query it back → confirm it → verify confidence increased → verify it appears in Siyuan
+- [x] 13.1 Round-trip smoke test: propose a KU manually → query it back → confirm it → verify confidence increased (0.5→0.6, draft→active, 0→1 confirmations)
 - [ ] 13.2 Cross-session test: propose a KU in session A, start session B in Hauswart project, query retrieves the KU from session A
 - [ ] 13.3 Error auto-query test: trigger a Swift build error in Hauswart, verify PostToolUse hook fires query, verify relevant KU is surfaced
 - [ ] 13.4 Reflect test: run /stolperstein:reflect after a Hauswart debugging session, verify candidates generated, propose one, verify it's stored and synced

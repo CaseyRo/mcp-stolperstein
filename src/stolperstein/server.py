@@ -92,8 +92,10 @@ async def reflect(session_summary: str) -> dict:
     Returns ranked candidate KUs scored by generalizability.
     Call propose on any candidates you want to keep.
     """
-    # TODO: implement LLM-based candidate extraction
-    return {"candidates": [], "message": "Reflect not yet implemented"}
+    from stolperstein.reflect import reflect_with_dedup
+    from stolperstein.store import store
+
+    return await reflect_with_dedup(session_summary, store=store)
 
 
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True))

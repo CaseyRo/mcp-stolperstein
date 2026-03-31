@@ -20,6 +20,9 @@ services:
       - CQ_SIYUAN_URL=${CQ_SIYUAN_URL:-}
       - CQ_SIYUAN_NOTEBOOK=${CQ_SIYUAN_NOTEBOOK:-}
       - CQ_SIYUAN_TOKEN=${CQ_SIYUAN_TOKEN:-}
+      - CQ_LLM_API_URL=${CQ_LLM_API_URL:-}
+      - CQ_LLM_API_KEY=${CQ_LLM_API_KEY:-}
+      - CQ_LLM_MODEL=${CQ_LLM_MODEL:-gpt-4o-mini}
     volumes:
       - stolperstein-data:/data
 

@@ -34,6 +34,11 @@ class Settings(BaseSettings):
     cq_embedding_model: str = "all-MiniLM-L6-v2"
     cq_embedding_api_url: str = ""
 
+    # LLM for reflect tool (OpenAI-compatible chat completions endpoint)
+    cq_llm_api_url: str = ""  # e.g. https://api.openai.com/v1 or local endpoint
+    cq_llm_api_key: str = ""
+    cq_llm_model: str = "gpt-4o-mini"
+
     # CQ team sync (optional)
     cq_team_addr: str = ""
     cq_team_api_key: SecretStr = SecretStr("")

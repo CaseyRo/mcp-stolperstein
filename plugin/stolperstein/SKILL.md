@@ -3,7 +3,7 @@ name: stolperstein
 description: Query and contribute to the Stolperstein knowledge base — experiential knowledge for AI coding agents
 metadata:
   filePattern: []
-  bashPattern: ["error", "failed", "Error:"]
+  bashPattern: ["error", "failed", "Error:", "FAILED", "fatal", "panic", "traceback", "Exception", "denied", "refused", "timeout", "not found"]
   priority: 50
 ---
 

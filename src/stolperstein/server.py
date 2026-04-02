@@ -13,12 +13,20 @@ def _build_auth():
     """Build auth provider if running in HTTP mode."""
     if settings.transport != "http":
         return None
+    if not settings.keycloak_client_secret:
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "KEYCLOAK_CLIENT_SECRET not set — OIDC proxy auth disabled"
+        )
+        return None
     api_key = settings.ensure_api_key()
     return create_auth(
         api_key=api_key,
         base_url=settings.base_url,
         keycloak_issuer=settings.keycloak_issuer,
-        keycloak_audience=settings.keycloak_audience,
+        keycloak_client_id=settings.keycloak_client_id,
+        keycloak_client_secret=settings.keycloak_client_secret,
     )
 
 

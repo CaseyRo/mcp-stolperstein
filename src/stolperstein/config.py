@@ -26,9 +26,11 @@ class Settings(BaseSettings):
     mcp_stolperstein_api_key: str = ""
     mcp_stolperstein_public_url: str = ""
 
-    # Keycloak JWT validation
+    # Keycloak OIDC
     keycloak_issuer: str = "https://auth.cdit-works.de/realms/cdit-mcp"
     keycloak_audience: str = "mcp-stolperstein"
+    keycloak_client_id: str = "mcp-stolperstein"
+    keycloak_client_secret: str = ""
 
     # Embeddings
     cq_embedding_model: str = "all-MiniLM-L6-v2"

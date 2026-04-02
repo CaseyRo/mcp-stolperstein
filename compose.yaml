@@ -13,6 +13,8 @@ services:
       - MCP_STOLPERSTEIN_PUBLIC_URL=${MCP_STOLPERSTEIN_PUBLIC_URL:-https://mcp-stolperstein.cdit-dev.de}
       - KEYCLOAK_ISSUER=${KEYCLOAK_ISSUER:-https://auth.cdit-works.de/realms/cdit-mcp}
       - KEYCLOAK_AUDIENCE=${KEYCLOAK_AUDIENCE:-mcp-stolperstein}
+      - KEYCLOAK_CLIENT_ID=${KEYCLOAK_CLIENT_ID:-mcp-stolperstein}
+      - KEYCLOAK_CLIENT_SECRET=${KEYCLOAK_CLIENT_SECRET}
       - CQ_EMBEDDING_MODEL=${CQ_EMBEDDING_MODEL:-all-MiniLM-L6-v2}
       - CQ_EMBEDDING_API_URL=${CQ_EMBEDDING_API_URL:-}
       - CQ_TEAM_ADDR=${CQ_TEAM_ADDR:-}

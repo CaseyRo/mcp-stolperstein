@@ -25,8 +25,11 @@ services:
       - CQ_LLM_API_URL=${CQ_LLM_API_URL:-}
       - CQ_LLM_API_KEY=${CQ_LLM_API_KEY:-}
       - CQ_LLM_MODEL=${CQ_LLM_MODEL:-gpt-4o-mini}
+      - FASTMCP_HOME=/data/fastmcp
     volumes:
       - stolperstein-data:/data
+      - fastmcp-data:/data/fastmcp
 
 volumes:
   stolperstein-data:
+  fastmcp-data:

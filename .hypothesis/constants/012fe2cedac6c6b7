@@ -1,0 +1,4 @@
+# file: /Users/caseyromkes/dev/stolpersteine/src/stolperstein/config.py
+# hypothesis_version: 6.151.10
+
+[8716, '/', '127.0.0.1', 'INFO', 'all-MiniLM-L6-v2', 'case_sensitive', 'env_prefix', 'gpt-4o-mini', 'http', 'mcp-stolperstein', 'stdio']

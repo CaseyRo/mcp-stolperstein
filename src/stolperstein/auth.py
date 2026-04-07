@@ -2,9 +2,9 @@
 
 Supports two authentication modes simultaneously via MultiAuth:
 
-1. **Keycloak OIDC** (for Claude.ai connectors and other OAuth clients):
-   The server proxies the full OAuth flow via OIDCProxy using pre-registered
-   Keycloak client credentials. No Dynamic Client Registration (DCR) needed.
+1. **Cloudflare Access OIDC** (for MCP Portal and other OAuth clients):
+   The server proxies the full OAuth flow via OIDCProxy using a
+   Cloudflare Access for SaaS OIDC application.
 
 2. **Bearer token** (for Claude Code, n8n, and other direct clients):
    Static API key validation via Authorization: Bearer <key>.
@@ -51,29 +51,27 @@ class BearerTokenVerifier(TokenVerifier):
 def create_auth(
     api_key: str | None,
     base_url: str,
-    keycloak_issuer: str,
-    keycloak_client_id: str,
-    keycloak_client_secret: str,
+    cf_access_config_url: str,
+    cf_access_client_id: str,
+    cf_access_client_secret: str,
 ) -> MultiAuth:
     """Create the dual authentication provider.
 
     Returns a MultiAuth that accepts both:
-    - Keycloak OIDC clients (Claude.ai) via OIDCProxy (server-side OAuth)
+    - Cloudflare Access OIDC clients (MCP Portal) via OIDCProxy
     - Bearer token clients (Claude Code, n8n) via static API key
 
     Args:
         api_key: Static API key for bearer token auth (None to skip).
         base_url: Public URL of this server.
-        keycloak_issuer: Keycloak realm issuer URL.
-        keycloak_client_id: Pre-registered Keycloak client ID.
-        keycloak_client_secret: Keycloak client secret.
+        cf_access_config_url: CF Access OIDC discovery URL.
+        cf_access_client_id: CF Access SaaS app client ID.
+        cf_access_client_secret: CF Access SaaS app client secret.
     """
-    config_url = f"{keycloak_issuer}/.well-known/openid-configuration"
-
     oidc_auth = OIDCProxy(
-        config_url=config_url,
-        client_id=keycloak_client_id,
-        client_secret=keycloak_client_secret,
+        config_url=cf_access_config_url,
+        client_id=cf_access_client_id,
+        client_secret=cf_access_client_secret,
         base_url=base_url,
     )
 

@@ -26,11 +26,10 @@ class Settings(BaseSettings):
     mcp_stolperstein_api_key: str = ""
     mcp_stolperstein_public_url: str = ""
 
-    # Keycloak OIDC
-    keycloak_issuer: str = "https://auth.cdit-works.de/realms/cdit-mcp"
-    keycloak_audience: str = "mcp-stolperstein"
-    keycloak_client_id: str = "mcp-stolperstein"
-    keycloak_client_secret: str = ""
+    # Cloudflare Access OIDC (replaces Keycloak)
+    cf_access_team: str = ""
+    cf_access_client_id: str = ""
+    cf_access_client_secret: str = ""
 
     # Embeddings
     cq_embedding_model: str = "all-MiniLM-L6-v2"
@@ -73,6 +72,15 @@ class Settings(BaseSettings):
             "Generated API key: %s (set MCP_STOLPERSTEIN_API_KEY to persist)", key
         )
         return key
+
+    @property
+    def cf_access_config_url(self) -> str:
+        """OIDC discovery URL for Cloudflare Access."""
+        return (
+            f"https://{self.cf_access_team}.cloudflareaccess.com"
+            f"/cdn-cgi/access/sso/oidc/{self.cf_access_client_id}"
+            f"/.well-known/openid-configuration"
+        )
 
     @property
     def base_url(self) -> str:

@@ -48,6 +48,22 @@ class Settings(BaseSettings):
     cq_siyuan_url: str = ""
     cq_siyuan_notebook: str = ""
     cq_siyuan_token: SecretStr = SecretStr("")
+    cq_siyuan_schema_version: int = 1  # 0 = legacy shape during transition
+
+    # Multi-tenant visibility
+    trusted_orgs: str = "*"  # comma-separated DIDs; "*" = trust-all
+
+    # Emergent signal detection
+    stolperstein_emergent_disabled: bool = False
+    emergent_detect_every_n: int = 10
+    emergent_min_misses: int = 5
+    emergent_min_sessions: int = 2
+
+    # Claude Code hooks
+    stolperstein_hooks_disabled: str = ""  # comma-separated hook names
+    stolperstein_hook_cooldown_s: int = 30
+    stolperstein_reflect_threshold: int = 20
+    stolperstein_error_patterns: str = ""  # project override (JSON list)
 
     model_config = {"env_prefix": "", "case_sensitive": False}
 
@@ -96,6 +112,14 @@ class Settings(BaseSettings):
     @property
     def team_sync_enabled(self) -> bool:
         return bool(self.cq_team_addr)
+
+    @property
+    def trusted_orgs_list(self) -> list[str]:
+        """Parsed comma-separated DIDs; `['*']` means trust-all."""
+        raw = self.trusted_orgs.strip()
+        if not raw:
+            return ["*"]
+        return [t.strip() for t in raw.split(",") if t.strip()]
 
 
 settings = Settings()

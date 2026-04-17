@@ -91,8 +91,12 @@ class TestKindClassification:
     def test_workaround_had_to(self):
         assert _classify_kind("Had to rewrite the handler to fetch data separately") == KUKind.workaround
 
-    def test_gap_signal_missing(self):
-        assert _classify_kind("Missing support for batch operations") == KUKind.gap_signal
+    def test_gap_like_falls_through_to_pitfall_or_workaround(self):
+        # gap-signal is no longer a proposable kind in CQ v1 — gap-like
+        # language falls through to pitfall (default) unless it's clearly
+        # a workaround.
+        result = _classify_kind("Missing support for batch operations")
+        assert result in (KUKind.pitfall, KUKind.workaround)
 
     def test_default_pitfall(self):
         assert _classify_kind("Something happened") == KUKind.pitfall

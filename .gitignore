@@ -11,3 +11,7 @@ build/
 .pytest_cache/
 .ruff_cache/
 .venv/
+.hypothesis/
+# Private signing key — never committed.
+stolperstein.key
+*.bak-pre-v*

@@ -57,10 +57,30 @@ class SiyuanSyncClient:
         raise RuntimeError(f"Siyuan notebook '{self._notebook}' not found")
 
     def _render_ku_markdown(self, ku: dict) -> str:
-        """Render a KU as structured Siyuan markdown."""
+        """Render a KU as structured Siyuan markdown.
+
+        Accepts either the pre-change v0 shape (flat `domain`, `confidence`,
+        `last_confirmed`) or the current rich shape (`domains`, nested
+        `evidence`). Field access falls back gracefully between the two.
+        """
         insight = ku.get("insight", {})
-        domain = ku.get("domain", [])
-        tags = " ".join(f"#{t}" for t in domain)
+        # Field name: v1 uses `domains` (plural), v0 uses `domain` (singular).
+        tag_list = ku.get("domains") or ku.get("domain") or []
+        tags = " ".join(f"#{t}" for t in tag_list)
+
+        evidence = ku.get("evidence") or {}
+        confidence = evidence.get("confidence") if evidence else ku.get("confidence", 0)
+        confirmations = evidence.get("confirmations") if evidence else ku.get("confirmations", 0)
+        first_observed = (
+            evidence.get("first_observed") if evidence else ku.get("first_observed", "")
+        )
+        last_confirmed = (
+            evidence.get("last_confirmed") if evidence else ku.get("last_confirmed", "")
+        )
+
+        severity_row = ""
+        if evidence and evidence.get("severity"):
+            severity_row = f"| Severity | {evidence['severity']} |\n"
 
         return f"""{tags}
 
@@ -78,11 +98,11 @@ class SiyuanSyncClient:
 |-------|-------|
 | Kind | {ku.get('kind', '')} |
 | Status | {ku.get('status', '')} |
-| Confidence | {ku.get('confidence', 0)} |
-| Confirmations | {ku.get('confirmations', 0)} |
-| First Observed | {ku.get('first_observed', '')} |
-| Last Confirmed | {ku.get('last_confirmed', '')} |
-| ID | `{ku.get('id', '')}` |
+| Confidence | {confidence} |
+| Confirmations | {confirmations} |
+| First Observed | {first_observed} |
+| Last Confirmed | {last_confirmed} |
+{severity_row}| ID | `{ku.get('id', '')}` |
 """
 
     async def sync_ku(self, ku: dict, action: str = "upsert") -> None:
@@ -191,3 +211,23 @@ def get_siyuan_client() -> SiyuanSyncClient | None:
         token=settings.cq_siyuan_token.get_secret_value(),
         notebook=settings.cq_siyuan_notebook,
     )
+
+
+def serialize_for_siyuan(ku) -> dict:
+    """Pick the right serializer based on `CQ_SIYUAN_SCHEMA_VERSION`.
+
+    `0` → legacy v0 (during Siyuan-sync transition).
+    `1` → current rich shape (default).
+
+    `ku` may be a `KnowledgeUnit` model or an already-serialized dict; if
+    it's already a dict we pass it through (assumes the caller picked the
+    right shape).
+    """
+    from stolperstein.models import KnowledgeUnit
+    if isinstance(ku, dict):
+        return ku
+    if not isinstance(ku, KnowledgeUnit):
+        raise TypeError(f"expected KnowledgeUnit or dict, got {type(ku).__name__}")
+    if settings.cq_siyuan_schema_version == 0:
+        return ku.to_cq_v0()
+    return ku.to_cq_json_rich()

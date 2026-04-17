@@ -1,4 +1,0 @@
-# file: /Users/caseyromkes/dev/stolpersteine/src/stolperstein/models.py
-# hypothesis_version: 6.151.9
-
-[0.0, 0.5, 1.0, 280, '1.0.0', 'active', 'archived', 'disputed', 'draft', 'gap-signal', 'json', 'pitfall', 'stale', 'tool-recommendation', 'workaround']

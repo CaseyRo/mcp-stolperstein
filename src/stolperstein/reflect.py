@@ -10,7 +10,7 @@ import json
 import logging
 import re
 
-from stolperstein.models import KUKind, ReflectCandidate
+from stolperstein.models import KUKind, KUSeverity, ReflectCandidate
 
 logger = logging.getLogger(__name__)
 
@@ -24,10 +24,12 @@ that would help a DIFFERENT agent on a DIFFERENT project in the future.
 Rules:
 - Only extract learnings that are transferable — skip project-specific decisions.
 - Each candidate must have: summary (max 280 chars), detail, action (imperative),
-  domain (technology tags), kind (pitfall|workaround|tool-recommendation|gap-signal),
+  domains (technology tags, at least one), kind (pitfall|workaround|tool-recommendation),
   and generalizability_score (0.0-1.0).
 - generalizability_score: 0.0 = only useful for this exact project,
   1.0 = universally useful across all projects.
+- Optionally include: context_languages, context_frameworks, context_environment,
+  context_pattern, severity (low|medium|high|critical, default medium).
 - Return an empty array if there are no generalizable learnings.
 - Be selective — quality over quantity. 3 good candidates beat 8 mediocre ones.
 
@@ -42,9 +44,12 @@ Return a JSON array where each element has:
 - "summary": string (max 280 chars, concise description of the learning)
 - "detail": string (full context of what happened and why it matters)
 - "action": string (imperative — what to do when encountering this)
-- "domain": string[] (technology tags like ["docker", "webhooks", "attio"])
-- "kind": "pitfall" | "workaround" | "tool-recommendation" | "gap-signal"
-- "generalizability_score": number 0.0-1.0"""
+- "domains": string[] (technology tags like ["docker", "webhooks", "attio"], min 1)
+- "kind": "pitfall" | "workaround" | "tool-recommendation"
+- "generalizability_score": number 0.0-1.0
+- Optional: "context_languages": string[], "context_frameworks": string[],
+  "context_environment": string, "context_pattern": string,
+  "severity": "low" | "medium" | "high" | "critical" """
 
 
 async def _llm_extract(session_summary: str) -> list[ReflectCandidate] | None:
@@ -89,20 +94,34 @@ async def _llm_extract(session_summary: str) -> list[ReflectCandidate] | None:
             logger.warning("LLM returned non-array: %s", type(raw))
             return None
 
-        valid_kinds = {k.value for k in KUKind}
+        # Proposable kinds only — tool-gap-signal is emergent-only.
+        proposable_kinds = {"pitfall", "workaround", "tool-recommendation"}
+        valid_severities = {s.value for s in KUSeverity}
         candidates = []
         for item in raw:
             kind_val = item.get("kind", "pitfall")
-            if kind_val not in valid_kinds:
+            if kind_val not in proposable_kinds:
                 kind_val = "pitfall"
+            sev_val = item.get("severity", "medium")
+            if sev_val not in valid_severities:
+                sev_val = "medium"
+            # Accept both `domains` (new) and `domain` (legacy from old LLM prompts).
+            domains = item.get("domains") or item.get("domain") or ["general"]
+            if not isinstance(domains, list) or not domains:
+                domains = ["general"]
             candidates.append(
                 ReflectCandidate(
                     summary=str(item.get("summary", ""))[:280],
                     detail=str(item.get("detail", "")),
                     action=str(item.get("action", "")),
-                    domain=item.get("domain", ["general"]),
+                    domains=domains,
                     kind=KUKind(kind_val),
                     generalizability_score=max(0.0, min(1.0, float(item.get("generalizability_score", 0.5)))),
+                    context_languages=item.get("context_languages") or [],
+                    context_frameworks=item.get("context_frameworks") or [],
+                    context_environment=item.get("context_environment"),
+                    context_pattern=item.get("context_pattern"),
+                    severity=KUSeverity(sev_val),
                 )
             )
 
@@ -172,12 +191,8 @@ _KIND_SIGNALS: dict[KUKind, list[str]] = {
         r"(?:better|easier|faster)\s+(?:with|using|than)",
         r"(?:tool|library|package|framework|service)\s+(?:that|which)",
     ],
-    KUKind.gap_signal: [
-        r"(?:missing|lacking|absent|no\s+support|not\s+supported)",
-        r"(?:needed|need|require[sd]?)\s+(?:a|an|the|better|proper)",
-        r"(?:should\s+(?:have|be|exist))",
-        r"(?:gap|limitation|shortcoming)",
-    ],
+    # gap-signal is emergent-only (not proposable) — gap-like language falls
+    # through to `workaround` or `pitfall` below.
 }
 
 _SPECIFIC_SIGNALS = [
@@ -226,11 +241,13 @@ def _extract_domains(text: str) -> list[str]:
 
 def _classify_kind(text: str) -> KUKind:
     text_lower = text.lower()
-    scores: dict[KUKind, int] = {k: 0 for k in KUKind}
+    scores: dict[KUKind, int] = {k: 0 for k in _KIND_SIGNALS}
     for kind, patterns in _KIND_SIGNALS.items():
         for pattern in patterns:
             if re.search(pattern, text_lower):
                 scores[kind] += 1
+    if not scores:
+        return KUKind.pitfall
     best = max(scores, key=scores.get)
     return best if scores[best] > 0 else KUKind.pitfall
 
@@ -299,9 +316,10 @@ def _heuristic_extract(session_summary: str) -> list[ReflectCandidate]:
                 summary=_extract_summary(segment),
                 detail=detail,
                 action=_extract_action(segment),
-                domain=_extract_domains(segment),
+                domains=_extract_domains(segment),
                 kind=_classify_kind(segment),
                 generalizability_score=_score_generalizability(segment),
+                severity=KUSeverity.medium,
             )
         )
 

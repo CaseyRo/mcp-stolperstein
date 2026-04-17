@@ -1,4 +1,0 @@
-# file: /Users/caseyromkes/dev/stolpersteine/src/stolperstein/config.py
-# hypothesis_version: 6.151.9
-
-[8716, '/', '127.0.0.1', 'INFO', 'all-MiniLM-L6-v2', 'case_sensitive', 'env_prefix', 'http', 'mcp-stolperstein', 'stdio']

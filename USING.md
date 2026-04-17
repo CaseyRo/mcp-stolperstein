@@ -4,6 +4,20 @@ A practical runbook for day-to-day use with Claude Code. If something isn't clea
 
 ---
 
+## The short version (read this first)
+
+**Stolperstein is shared muscle memory for every Claude Code session you run.** You don't operate it directly — the agent in the session does. What you notice is that Claude gets better at avoiding pitfalls it's never seen in this particular repo before, because it's drawing on a KB captured from every past session across all your projects.
+
+**Your only recurring intentional act is `/stolperstein:reflect`** at the end of a substantive session — and even then, the Stop hook reminds you when it matters. Everything else (hooks firing, query / confirm / flag / propose calls) is Claude-driven, not you-driven.
+
+- **Hooks fire in the background, silently.** You don't see them. They inject a one-line hint into Claude's context before Claude reads your next message, so Claude knows about a relevant KU without having to be asked.
+- **Claude calls `query()`, `confirm()`, `flag()` itself.** The `SKILL.md` bundled with the plugin tells it to. You never type these unless you want to override Claude's judgment.
+- **`/stolperstein:reflect` is the one human-in-the-loop step.** You type it, Claude walks you through candidate KUs, you say yes/no, Claude proposes the keepers.
+
+If you just want to *use* Stolperstein: do the one-time setup below, then forget about it. Run `/stolperstein:reflect` when the Stop hook nudges you (or whenever you felt a session taught you something worth preserving). Done.
+
+---
+
 ## One-time setup (do this once per machine)
 
 ### 1. Make sure the server is reachable
@@ -82,31 +96,35 @@ If a project uses an unusual error signature Stolperstein doesn't recognize (e.g
 
 ---
 
-## When to call tools manually
+## When to override Claude manually
 
-The hooks only surface *one field* of the matching KU (the action). For the full picture, call the MCP tool yourself. Examples you might type in Claude Code:
+Claude will call `query` / `confirm` / `flag` on its own when it decides they're useful. You only need to step in when you want to override that judgment. Examples of things you might say to Claude:
 
-- **Before touching an unfamiliar stack:**
-  > Query Stolperstein for Swift concurrency gotchas in Xcode 16.
+- **Force a lookup before Claude assumes it knows:**
+  > Before you touch the Xcode project, check Stolperstein for Swift concurrency traps.
 
-  Claude will call `query(text="Swift concurrency Xcode 16", domain=["swift","xcode"])`.
+  Claude calls `query(...)` even though no hook triggered.
 
-- **When a hint helped and was accurate:**
-  > Confirm ku_abc123.
+- **Tell Claude a hint helped even if it didn't say so:**
+  > That last injected tip saved us — confirm ku_abc123.
 
-  → `confirm(ku_id="ku_abc123")`. Boosts confidence for everyone.
+  Claude calls `confirm(...)`.
 
-- **When a hint was wrong or outdated:**
-  > Flag ku_abc123 as incorrect — that workaround no longer applies post-Xcode 16.2.
+- **Tell Claude a hint was bad:**
+  > That Stolperstein suggestion was wrong, the workaround doesn't apply anymore — flag it as incorrect.
 
-  → `flag(ku_id="ku_abc123", reason="incorrect", detail="...")`.
+  Claude calls `flag(...)`.
 
-- **When two KUs cover the same ground and the newer one is better:**
-  > Flag ku_old_789 as superseded by ku_new_012.
+- **Inspect the KB:**
+  > Show me Stolperstein status with debug info.
+
+  Claude calls `status(debug=True)`.
+
+You're always in "talking to Claude" mode, never "running tools directly" mode.
 
 ---
 
-## End of session — /stolperstein:reflect
+## End of session — /stolperstein:reflect (the ONE thing you trigger)
 
 The Stop hook will nudge you when a session was substantive. If you want to capture what you learned (or you want to capture something even on a short session), type:
 
@@ -114,12 +132,14 @@ The Stop hook will nudge you when a session was substantive. If you want to capt
 /stolperstein:reflect
 ```
 
-What happens:
+What happens — **Claude does all of it, you just approve**:
 
-1. Claude asks you to summarize the session in plain prose.
-2. The skill calls `reflect(session_summary="…")` which returns **candidate KUs** — pre-filled with `summary`, `detail`, `action`, `domains`, `kind`, `severity`, and `context_*` fields.
-3. Claude walks through each candidate and asks if you want to keep it.
-4. For each keeper, Claude calls `propose(...)` with the pre-filled fields. You see the new KU id.
+1. Claude asks you to summarize the session in plain prose. (One paragraph. What broke, what you fixed, what was non-obvious.)
+2. Claude calls `reflect(session_summary="…")` — returns candidate KUs pre-filled with summary / detail / action / domains / kind / severity / context_*.
+3. Claude walks each candidate and asks you "keep this one? y/n."
+4. For each "yes," Claude calls `propose(...)` and shows you the new KU id.
+
+You never type `propose(...)` yourself. You just read what Claude proposes and say yes or no.
 
 Good candidates:
 

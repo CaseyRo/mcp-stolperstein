@@ -19,23 +19,31 @@ COPY --from=builder /usr/local/bin/mcp-stolperstein /usr/local/bin/mcp-stolperst
 COPY --from=builder /root/.cache/huggingface /root/.cache/huggingface
 COPY --from=builder /app/src ./src
 
-# Create non-root user
-RUN addgroup --system mcp && adduser --system --ingroup mcp mcp && \
+# Create non-root user with a real HOME so HuggingFace / FastMCP caches resolve.
+RUN addgroup --system mcp && \
+    adduser --system --ingroup mcp --home /home/mcp mcp && \
     mkdir -p /data && chown mcp:mcp /data && \
     mkdir -p /home/mcp/.cache && \
     mv /root/.cache/huggingface /home/mcp/.cache/huggingface && \
-    chown -R mcp:mcp /home/mcp/.cache
+    chown -R mcp:mcp /home/mcp
 
 USER mcp
 
 # Default env for Docker
-ENV TRANSPORT=http
-ENV HOST=0.0.0.0
-ENV CQ_LOCAL_DB_PATH=/data/stolperstein.db
+ENV HOME=/home/mcp \
+    HF_HOME=/home/mcp/.cache/huggingface \
+    TRANSFORMERS_CACHE=/home/mcp/.cache/huggingface \
+    TRANSPORT=http \
+    HOST=0.0.0.0 \
+    CQ_LOCAL_DB_PATH=/data/stolperstein.db
 
 EXPOSE 8716
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-  CMD python3 -c "from urllib.request import urlopen;from urllib.error import HTTPError,URLError;exec('try:\n urlopen(\"http://localhost:8716/mcp\")\nexcept HTTPError:\n pass\nexcept URLError:\n raise')"
+# Unauthenticated /health returns 200 when the server is up and migrations
+# have finished. No bearer token needed → healthcheck logs don't flood
+# with 401s.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+  CMD python3 -c "import urllib.request,sys; \
+urllib.request.urlopen('http://localhost:8716/health', timeout=3); sys.exit(0)"
 
 CMD ["mcp-stolperstein"]

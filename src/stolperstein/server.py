@@ -60,6 +60,36 @@ mcp = FastMCP(
 )
 
 
+@mcp.custom_route("/health", methods=["GET"])
+async def health(_request):
+    """Unauthenticated liveness + schema_version probe.
+
+    Returns 200 with a small JSON payload when the server can read its own
+    store and report a schema version. Used by the Docker HEALTHCHECK and
+    by any upstream (Komodo / Cloudflare / Tailscale) that wants a
+    no-auth GET endpoint to verify the container is serving.
+
+    Intentionally does NOT reveal `proposer_did` or KU content — just
+    shape health (can we reach SQLite + run migrations).
+    """
+    from starlette.responses import JSONResponse
+    try:
+        from stolperstein import migrations as m
+        from stolperstein.store import store
+        db = store._get_db()
+        version = m.current_version(db)
+        return JSONResponse({
+            "status": "ok",
+            "schema_version": version,
+            "transport": settings.transport,
+        })
+    except Exception as e:
+        return JSONResponse(
+            {"status": "degraded", "error": type(e).__name__},
+            status_code=503,
+        )
+
+
 @mcp.custom_route("/hook/query", methods=["POST"])
 async def hook_query(request):
     """Stdlib-friendly REST endpoint for Claude Code hook handlers.

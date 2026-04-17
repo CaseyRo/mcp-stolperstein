@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
 
 
 def test_default_settings(monkeypatch):
@@ -15,8 +14,9 @@ def test_default_settings(monkeypatch):
     s = Settings()
     assert s.transport == "stdio"
     assert s.port == 8716
-    assert s.keycloak_audience == "mcp-stolperstein"
     assert s.cq_embedding_model == "all-MiniLM-L6-v2"
+    assert s.trusted_orgs == "*"
+    assert s.cq_siyuan_schema_version == 1
 
 
 def test_ensure_api_key_generates(monkeypatch):

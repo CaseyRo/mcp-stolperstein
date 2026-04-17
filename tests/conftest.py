@@ -2,17 +2,22 @@
 
 from __future__ import annotations
 
-import os
-import tempfile
+import base64
 
 import pytest
 
 
 @pytest.fixture(autouse=True)
 def _isolate_env(monkeypatch):
-    """Ensure tests don't use real config."""
+    """Ensure tests don't use real config, don't touch /data, and don't
+    generate a new DID per test (use a deterministic zero-key)."""
     monkeypatch.setenv("CQ_LOG_LEVEL", "DEBUG")
     monkeypatch.setenv("TRANSPORT", "stdio")
+    # Deterministic signing key = no filesystem side effects for tests.
+    monkeypatch.setenv(
+        "MCP_STOLPERSTEIN_SIGNING_KEY",
+        base64.b64encode(b"\x00" * 32).decode(),
+    )
 
 
 @pytest.fixture
@@ -27,7 +32,6 @@ def store(tmp_db, monkeypatch):
     monkeypatch.setenv("CQ_LOCAL_DB_PATH", tmp_db)
     monkeypatch.setenv("CQ_EMBEDDING_API_URL", "")
 
-    # Force NoOp embeddings for tests (no sentence-transformers needed)
     from stolperstein.embeddings import NoOpEmbeddings
     from stolperstein.store import KnowledgeStore
 

@@ -1,34 +1,34 @@
 {
+  "UserPromptSubmit": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/handlers/on_prompt.py",
+          "timeout": 2
+        }
+      ]
+    }
+  ],
   "PostToolUse": [
     {
       "matcher": "Bash",
       "hooks": [
         {
           "type": "command",
-          "command": "INPUT=$(cat); EXIT_CODE=$(echo \"$INPUT\" | jq -r '.tool_output.exit_code // \"0\"'); if [ \"$EXIT_CODE\" != \"0\" ]; then STDERR=$(echo \"$INPUT\" | jq -r '.tool_output.stderr // \"\"' | head -5 | tr '\\n' ' '); CMD=$(echo \"$INPUT\" | jq -r '.tool_input.command // \"\"' | head -1); echo \"[Stolperstein] Command failed (exit $EXIT_CODE): $CMD — Query Stolperstein for known pitfalls: query(text=\\\"$(echo $STDERR | head -c 200)\\\")\"; fi",
-          "timeout": 5000
-        }
-      ]
-    },
-    {
-      "matcher": "mcp__claude_ai_Stolperstein_MCP__query",
-      "hooks": [
-        {
-          "type": "command",
-          "command": "INPUT=$(cat); COUNT=$(echo \"$INPUT\" | jq -r '.tool_output.count // 0'); if [ \"$COUNT\" -gt 0 ]; then echo \"[Stolperstein] Found $COUNT matching KU(s). If any helped, confirm them with confirm(ku_id=\\\"...\\\"). If any are wrong, flag them.\"; fi",
-          "timeout": 3000
+          "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/handlers/on_bash.py",
+          "timeout": 2
         }
       ]
     }
   ],
-  "SessionStart": [
+  "Stop": [
     {
-      "matcher": "compact",
       "hooks": [
         {
           "type": "command",
-          "command": "echo \"[Stolperstein] This session has been substantial enough to trigger context compression. If you solved non-obvious problems or discovered gotchas, consider running /stolperstein:reflect before the session ends — or call reflect(session_summary=\\\"...\\\") directly with a summary of key learnings.\"",
-          "timeout": 3000
+          "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/handlers/on_stop.py",
+          "timeout": 2
         }
       ]
     }

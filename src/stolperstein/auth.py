@@ -48,6 +48,17 @@ class BearerTokenVerifier(TokenVerifier):
         )
 
 
+def create_bearer_only_auth(api_key: str, base_url: str) -> MultiAuth:
+    """Bearer-token-only auth — used when behind the CF MCP Portal or any
+    upstream that handles identity. No OIDC, no browser OAuth.
+    """
+    return MultiAuth(
+        server=None,
+        verifiers=BearerTokenVerifier(api_key),
+        base_url=base_url,
+    )
+
+
 def create_auth(
     api_key: str | None,
     base_url: str,

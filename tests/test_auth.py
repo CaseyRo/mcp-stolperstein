@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import pytest
 
-from stolperstein.auth import BearerTokenVerifier, generate_api_key
+from stolperstein.auth import (
+    BearerTokenVerifier,
+    create_bearer_only_auth,
+    generate_api_key,
+)
 
 
 @pytest.mark.asyncio
@@ -50,3 +54,16 @@ def test_generate_api_key_length():
     key = generate_api_key()
     # stmcp_ + 43 chars of base64url = 49+ chars
     assert len(key) >= 40
+
+
+def test_bearer_only_auth_builds_without_oidc():
+    """create_bearer_only_auth returns a MultiAuth with no OIDC server,
+    usable behind the CF MCP Portal (no OIDC discovery URL required).
+    """
+    from fastmcp.server.auth import MultiAuth
+
+    auth = create_bearer_only_auth(api_key="stmcp_test", base_url="http://localhost:8716")
+    assert isinstance(auth, MultiAuth)
+    # Sanity: the OIDC `server` slot is None so no discovery URL is fetched
+    # (which is the whole point — we don't have an OIDC provider).
+    assert auth.server is None

@@ -10,20 +10,34 @@ from pathlib import Path
 from fastmcp import FastMCP
 from mcp.types import Icon, ToolAnnotations
 
-from stolperstein.auth import create_auth
+from stolperstein.auth import create_auth, create_bearer_only_auth
 from stolperstein.config import settings
 
 
 def _build_auth():
-    """Build auth provider if running in HTTP mode."""
+    """Build auth provider for HTTP transport.
+
+    Two modes:
+
+    - **Behind CF MCP Portal (default)**: bearer-token-only. No OIDC config
+      needed — the Portal handles upstream identity; we just validate the
+      static bearer token that Claude Code / hooks present in the header.
+    - **Standalone with OIDC**: set `CF_ACCESS_CLIENT_ID` +
+      `CF_ACCESS_CLIENT_SECRET` to enable Cloudflare Access for SaaS OIDC
+      flow alongside bearer auth (for browser OAuth clients).
+
+    Stdio transport has no auth layer.
+    """
     if settings.transport != "http":
         return None
-    if not settings.cf_access_client_secret:
-        logging.getLogger(__name__).warning(
-            "CF_ACCESS_CLIENT_SECRET not set — OIDC proxy auth disabled"
-        )
-        return None
     api_key = settings.ensure_api_key()
+
+    # Bearer-only mode (the current CDiT fleet pattern — MCP Portal in front).
+    if not settings.cf_access_client_secret:
+        logger = logging.getLogger(__name__)
+        logger.info("CF Access OIDC disabled; bearer-token auth only")
+        return create_bearer_only_auth(api_key=api_key, base_url=settings.base_url)
+
     return create_auth(
         api_key=api_key,
         base_url=settings.base_url,

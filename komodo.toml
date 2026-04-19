@@ -7,7 +7,7 @@ tags = ["mcp"]
 [stack.config]
 server_id = "ubuntu-smurf-mirror"
 git_provider = "github.com"
-repo = "CaseyRo/stolpersteine"
+repo = "CaseyRo/mcp-stolperstein"
 branch = "main"
 environment = """
 MCP_STOLPERSTEIN_API_KEY = [[MCP_STOLPERSTEIN_API_KEY]]

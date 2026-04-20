@@ -4,7 +4,12 @@ WORKDIR /app
 COPY pyproject.toml README.md ./
 COPY src/ ./src/
 
-RUN pip install --no-cache-dir .
+# Pre-install CPU-only torch so sentence-transformers (pulled in by the
+# install below) resolves its torch dep from the CPU wheel index instead
+# of PyPI's default CUDA build. Saves ~5 GB of nvidia-cuda-* transitive
+# packages that nebula-1 (CPU-only Hetzner VM) can't use anyway.
+RUN pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cpu torch && \
+    pip install --no-cache-dir .
 
 # Pre-download the embedding model at build time
 RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"

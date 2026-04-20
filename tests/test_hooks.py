@@ -495,6 +495,9 @@ class TestEntryScriptsIntegration:
 
     def test_on_stop_short_session_no_nudge(self, monkeypatch, tmp_path, capsys):
         """Trivial exploratory sessions (below threshold) print nothing."""
+        # Isolate the unreachable marker to this test (previous test runs
+        # may have created /var/folders/.../stolperstein-unreachable-default).
+        monkeypatch.setenv("CLAUDE_SESSION_ID", "test-short-session-" + str(tmp_path.name))
         transcript = tmp_path / "t.jsonl"
         transcript.write_text("")  # empty transcript
         mod = _import("on_stop")
@@ -506,6 +509,165 @@ class TestEntryScriptsIntegration:
         captured = capsys.readouterr()
         assert captured.err == ""
         assert captured.out == ""
+
+
+class TestOnStopReflectViaHook:
+    """Phase 4 opt-in: STOLPERSTEIN_REFLECT_VIA_HOOK routes reflect through /hook/reflect."""
+
+    def _make_substantive_transcript(self, tmp_path):
+        """Build a JSONL transcript that meets the threshold + substantive bar."""
+        # 20 tool_use entries (meets threshold) + one that counts as substantive
+        entries = []
+        for i in range(20):
+            entries.append({
+                "message": {
+                    "content": [
+                        {"type": "tool_use", "name": "Bash" if i % 2 == 0 else "Read"}
+                    ]
+                }
+            })
+        # One confirm call = substantive signal
+        entries.append({
+            "message": {"content": [{"type": "tool_use", "name": "confirm"}]}
+        })
+        path = tmp_path / "transcript.jsonl"
+        path.write_text("\n".join(json.dumps(e) for e in entries))
+        return path
+
+    def test_opt_in_calls_reflect_suppresses_nudge(self, monkeypatch, tmp_path, capsys):
+        monkeypatch.setenv("CLAUDE_SESSION_ID", "test-opt-in-" + tmp_path.name)
+        monkeypatch.setenv("STOLPERSTEIN_REFLECT_VIA_HOOK", "true")
+        transcript = self._make_substantive_transcript(tmp_path)
+
+        mod = _import("on_stop")
+
+        captured = {}
+
+        async def fake_reflect(summary):
+            captured["summary"] = summary
+            return {"candidates": [], "method": "llm"}
+
+        # Patch the _client module import inside _call_reflect_safely
+        client_mod = _import("_client")
+        monkeypatch.setattr(client_mod, "call_reflect", fake_reflect)
+
+        monkeypatch.setattr(
+            "sys.stdin",
+            _StdinStub(json.dumps({"transcript_path": str(transcript)})),
+        )
+        assert mod.run() == 0
+        err = capsys.readouterr().err
+        # Nudge should NOT be printed when the hook handles it
+        assert "Run `/stolperstein:reflect`" not in err
+        # Summary was derived and passed
+        assert "summary" in captured
+        assert "tool-call turns" in captured["summary"]
+
+    def test_opt_out_preserves_nudge(self, monkeypatch, tmp_path, capsys):
+        monkeypatch.setenv("CLAUDE_SESSION_ID", "test-opt-out-" + tmp_path.name)
+        monkeypatch.delenv("STOLPERSTEIN_REFLECT_VIA_HOOK", raising=False)
+        transcript = self._make_substantive_transcript(tmp_path)
+
+        mod = _import("on_stop")
+        monkeypatch.setattr(
+            "sys.stdin",
+            _StdinStub(json.dumps({"transcript_path": str(transcript)})),
+        )
+        assert mod.run() == 0
+        err = capsys.readouterr().err
+        # Original nudge behavior is preserved
+        assert "Run `/stolperstein:reflect`" in err
+
+    def test_opt_in_below_threshold_is_silent(self, monkeypatch, tmp_path, capsys):
+        monkeypatch.setenv("CLAUDE_SESSION_ID", "test-opt-in-short-" + tmp_path.name)
+        monkeypatch.setenv("STOLPERSTEIN_REFLECT_VIA_HOOK", "true")
+        # Only 2 tool turns — below default threshold of 20
+        transcript = tmp_path / "t.jsonl"
+        transcript.write_text("\n".join([
+            json.dumps({"message": {"content": [{"type": "tool_use", "name": "Read"}]}}),
+            json.dumps({"message": {"content": [{"type": "tool_use", "name": "Read"}]}}),
+        ]))
+
+        mod = _import("on_stop")
+
+        call_count = {"n": 0}
+
+        async def fake_reflect(summary):
+            call_count["n"] += 1
+            return {}
+
+        client_mod = _import("_client")
+        monkeypatch.setattr(client_mod, "call_reflect", fake_reflect)
+
+        monkeypatch.setattr(
+            "sys.stdin",
+            _StdinStub(json.dumps({"transcript_path": str(transcript)})),
+        )
+        assert mod.run() == 0
+        assert call_count["n"] == 0  # Not called below threshold
+        assert capsys.readouterr().err == ""  # No nudge either
+
+    def test_opt_in_reflect_failure_marks_unreachable(self, monkeypatch, tmp_path, capsys):
+        """When call_reflect raises MCPUnreachable, mark the session and stay silent."""
+        import tempfile as _tempfile
+        session_id = "test-fail-" + tmp_path.name
+        monkeypatch.setenv("CLAUDE_SESSION_ID", session_id)
+        monkeypatch.setenv("STOLPERSTEIN_REFLECT_VIA_HOOK", "true")
+        transcript = self._make_substantive_transcript(tmp_path)
+
+        mod = _import("on_stop")
+        client_mod = _import("_client")
+
+        async def failing_reflect(summary):
+            raise client_mod.MCPUnreachable("connection failed")
+
+        monkeypatch.setattr(client_mod, "call_reflect", failing_reflect)
+
+        # Ensure marker doesn't exist from a prior run
+        marker_path = Path(_tempfile.gettempdir()) / f"stolperstein-unreachable-{session_id}"
+        if marker_path.exists():
+            marker_path.unlink()
+
+        monkeypatch.setattr(
+            "sys.stdin",
+            _StdinStub(json.dumps({"transcript_path": str(transcript)})),
+        )
+        assert mod.run() == 0
+        # Nothing printed this session (marker will be surfaced next session)
+        assert capsys.readouterr().err == ""
+        # Marker was created
+        assert marker_path.exists()
+        # Clean up
+        marker_path.unlink()
+
+    def test_opt_in_derives_summary_with_tool_counts(self, monkeypatch, tmp_path):
+        """The derived summary should include tool counts and session size."""
+        mod = _import("on_stop")
+        summary = mod._derive_session_summary(
+            tool_turns=25,
+            tool_names=["Bash", "Read", "Bash", "Edit", "Bash"],
+            error_snippets=['{"type":"tool_result","content":"exit code 1"}'],
+        )
+        assert "25 tool-call turns" in summary
+        assert "Bash×3" in summary
+        assert "Read×1" in summary or "Read×" in summary
+        assert "Error signals:" in summary
+
+    @pytest.mark.parametrize("val,expected", [
+        ("true", True),
+        ("TRUE", True),
+        ("1", True),
+        ("yes", True),
+        ("on", True),
+        ("false", False),
+        ("0", False),
+        ("", False),
+        ("anything-else", False),
+    ])
+    def test_reflect_via_hook_env_parsing(self, monkeypatch, val, expected):
+        monkeypatch.setenv("STOLPERSTEIN_REFLECT_VIA_HOOK", val)
+        mod = _import("on_stop")
+        assert mod._reflect_via_hook_enabled() is expected
 
 
 # Module-level import needed for the Stop test's json usage.

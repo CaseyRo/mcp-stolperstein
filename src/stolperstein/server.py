@@ -90,6 +90,47 @@ async def health(_request):
         )
 
 
+async def _hook_authorize(request):
+    """Shared auth + JSON-parse for /hook/* endpoints.
+
+    Returns either `(payload_dict, None)` on success or `(None, JSONResponse)`
+    with the appropriate 4xx/5xx error to return directly. Centralizes the
+    bearer comparison and transport/key guards so all hook routes behave
+    identically on the auth path.
+    """
+    import hmac
+
+    from starlette.responses import JSONResponse
+
+    if settings.transport != "http":
+        return None, JSONResponse({"error": "http transport required"}, status_code=503)
+
+    api_key = settings.mcp_stolperstein_api_key
+    if not api_key:
+        return None, JSONResponse(
+            {"error": "server has no API key configured"}, status_code=503
+        )
+
+    auth = request.headers.get("authorization", "")
+    if not auth.startswith("Bearer "):
+        return None, JSONResponse({"error": "bearer token required"}, status_code=401)
+    provided = auth[len("Bearer "):].strip()
+    if not hmac.compare_digest(provided, api_key):
+        return None, JSONResponse({"error": "invalid bearer token"}, status_code=401)
+
+    try:
+        payload = await request.json()
+    except Exception:
+        return None, JSONResponse({"error": "invalid JSON body"}, status_code=400)
+
+    if not isinstance(payload, dict):
+        return None, JSONResponse(
+            {"error": "JSON body must be an object"}, status_code=400
+        )
+
+    return payload, None
+
+
 @mcp.custom_route("/hook/query", methods=["POST"])
 async def hook_query(request):
     """Stdlib-friendly REST endpoint for Claude Code hook handlers.
@@ -103,28 +144,11 @@ async def hook_query(request):
     Body: `{"text": "...", "limit": 1, "confidence_min": 0.5}`
     Response: `{"results": [...], "count": N}` (same as MCP tool)
     """
-    import hmac
-
     from starlette.responses import JSONResponse
 
-    if settings.transport != "http":
-        return JSONResponse({"error": "http transport required"}, status_code=503)
-
-    api_key = settings.mcp_stolperstein_api_key
-    if not api_key:
-        return JSONResponse({"error": "server has no API key configured"}, status_code=503)
-
-    auth = request.headers.get("authorization", "")
-    if not auth.startswith("Bearer "):
-        return JSONResponse({"error": "bearer token required"}, status_code=401)
-    provided = auth[len("Bearer "):].strip()
-    if not hmac.compare_digest(provided, api_key):
-        return JSONResponse({"error": "invalid bearer token"}, status_code=401)
-
-    try:
-        payload = await request.json()
-    except Exception:
-        return JSONResponse({"error": "invalid JSON body"}, status_code=400)
+    payload, err = await _hook_authorize(request)
+    if err is not None:
+        return err
 
     text = payload.get("text", "")
     if not text:
@@ -137,6 +161,98 @@ async def hook_query(request):
     result = await store.query(
         text=text, domain=domain, confidence_min=confidence_min, limit=limit
     )
+    return JSONResponse(result)
+
+
+@mcp.custom_route("/hook/reflect", methods=["POST"])
+async def hook_reflect(request):
+    """REST wrapper around `reflect()` for zero-dep hook subprocesses.
+
+    Lets on_stop.py derive a session summary locally and POST it directly to
+    the origin, bypassing both the MCP Portal and the Anthropic connector
+    relay (whose WAF has been observed blocking reflect-sized payloads).
+
+    Request: `POST /hook/reflect`
+    Headers: `Authorization: Bearer <MCP_STOLPERSTEIN_API_KEY>`
+    Body: `{"session_summary": "..."}`
+    Response: ranked candidate-KU dict (same shape as MCP `reflect` tool)
+    """
+    from starlette.responses import JSONResponse
+
+    payload, err = await _hook_authorize(request)
+    if err is not None:
+        return err
+
+    session_summary = payload.get("session_summary", "")
+    if not isinstance(session_summary, str) or not session_summary.strip():
+        return JSONResponse(
+            {"error": "validation", "message": "session_summary (non-empty string) required"},
+            status_code=400,
+        )
+
+    try:
+        from stolperstein.reflect import reflect_with_dedup
+        from stolperstein.store import store
+        result = await reflect_with_dedup(session_summary, store=store)
+    except Exception as e:
+        logging.getLogger(__name__).exception("hook_reflect failed")
+        return JSONResponse(
+            {"error": "internal", "message": type(e).__name__}, status_code=500
+        )
+    return JSONResponse(result)
+
+
+@mcp.custom_route("/hook/propose", methods=["POST"])
+async def hook_propose(request):
+    """REST wrapper around `propose()` for zero-dep hook subprocesses.
+
+    Request: `POST /hook/propose`
+    Headers: `Authorization: Bearer <MCP_STOLPERSTEIN_API_KEY>`
+    Body: full propose() payload — `summary`, `detail`, `action`, `domains`,
+        `kind` required; `severity` + `context_*` optional.
+    Response: `{"ku": {...}, "duplicate_of": null, "message": null}` (same
+        shape as MCP `propose` tool).
+    """
+    from starlette.responses import JSONResponse
+
+    payload, err = await _hook_authorize(request)
+    if err is not None:
+        return err
+
+    required = ("summary", "detail", "action", "domains", "kind")
+    missing = [f for f in required if not payload.get(f)]
+    if missing:
+        return JSONResponse(
+            {"error": "validation", "message": f"missing required: {missing}"},
+            status_code=400,
+        )
+
+    domains = payload["domains"]
+    if not isinstance(domains, list) or not all(isinstance(d, str) for d in domains):
+        return JSONResponse(
+            {"error": "validation", "message": "domains must be a non-empty list of strings"},
+            status_code=400,
+        )
+
+    try:
+        from stolperstein.store import store
+        result = await store.propose(
+            summary=payload["summary"],
+            detail=payload["detail"],
+            action=payload["action"],
+            domains=domains,
+            kind=payload["kind"],
+            context_languages=payload.get("context_languages"),
+            context_frameworks=payload.get("context_frameworks"),
+            context_environment=payload.get("context_environment"),
+            context_pattern=payload.get("context_pattern"),
+            severity=payload.get("severity", "medium"),
+        )
+    except Exception as e:
+        logging.getLogger(__name__).exception("hook_propose failed")
+        return JSONResponse(
+            {"error": "internal", "message": type(e).__name__}, status_code=500
+        )
     return JSONResponse(result)
 
 

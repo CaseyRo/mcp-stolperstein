@@ -91,6 +91,7 @@ Three hooks ship with the plugin:
   - Conversational prose like "my regex failed" does NOT trigger — only structured signals do.
 - **`PostToolUse` (matcher=`Bash`)** — when a Bash tool call exits non-zero or its stderr contains a structured signal, the hook calls `query()` and lands a hint for the agent's next turn. Fire-and-forget with a 500ms budget; never delays your tool response.
 - **`Stop`** — at end of session, nudges `/stolperstein:reflect` if the session had ≥ `STOLPERSTEIN_REFLECT_THRESHOLD` tool-call turns (default 20) AND at least one non-zero bash exit OR one `flag`/`confirm` call. Trivial sessions produce no nudge.
+  - **Opt-in: `STOLPERSTEIN_REFLECT_VIA_HOOK=true`** — when set, the Stop hook skips the nudge and instead POSTs a locally-derived session summary directly to `POST /hook/reflect` on the origin server. This bypasses both the MCP Portal and Anthropic's connector relay, avoiding WAF false positives on reflect-sized payloads. Fire-and-forget; failures mark the session as unreachable and stay silent. Requires the server running Phase 2 of `mcp-hook-rest-and-waf-extension` (stolperstein ≥ 0.2.0) and the same `MCP_STOLPERSTEIN_PUBLIC_URL` + `MCP_STOLPERSTEIN_API_KEY` vars the other hooks already use.
 
 **Hook injections are rate-limited and sanitized.** A per-hook 30-second cooldown + 5-minute per-KU dedupe prevents flooding. Every KU `action` field is tag-stripped (`re.sub(r'<[^>]+>', '', action)`) before injection, so a crafted KU whose `action` contains `<system-reminder>` tags cannot impersonate a privileged instruction.
 
@@ -100,6 +101,7 @@ Three hooks ship with the plugin:
 
 - **Temporarily, one hook:** `STOLPERSTEIN_HOOKS_DISABLED=UserPromptSubmit` (comma-separated list supports multiple).
 - **Adjust thresholds:** `STOLPERSTEIN_HOOK_COOLDOWN_S=30`, `STOLPERSTEIN_REFLECT_THRESHOLD=20`.
+- **Route reflect through hook channel:** `STOLPERSTEIN_REFLECT_VIA_HOOK=true` (documented above under `Stop`).
 - **Project-specific error patterns:** `STOLPERSTEIN_ERROR_PATTERNS` (JSON array of regex strings) in `.claude/settings.json` replaces the default signal set.
 - **Fully off:** remove the `stolperstein` plugin's hook block from `.claude/settings.json`.
 

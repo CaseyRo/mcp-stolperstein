@@ -190,6 +190,169 @@ class TestClientTokenSafety:
         assert result is None
 
 
+class TestClientReflectAndPropose:
+    """The new call_reflect and call_propose helpers mirror call_query's contract."""
+
+    def setup_method(self):
+        self.client = _import("_client")
+
+    # --- env gating (same silent-None behavior as call_query) ---
+
+    @pytest.mark.asyncio
+    async def test_reflect_no_url_returns_none(self, monkeypatch):
+        monkeypatch.delenv("MCP_STOLPERSTEIN_PUBLIC_URL", raising=False)
+        result = await self.client.call_reflect("summary here")
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_reflect_no_token_returns_none(self, monkeypatch):
+        monkeypatch.setenv("MCP_STOLPERSTEIN_PUBLIC_URL", "http://127.0.0.1:1")
+        monkeypatch.delenv("MCP_STOLPERSTEIN_API_KEY", raising=False)
+        result = await self.client.call_reflect("summary here")
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_propose_no_url_returns_none(self, monkeypatch):
+        monkeypatch.delenv("MCP_STOLPERSTEIN_PUBLIC_URL", raising=False)
+        result = await self.client.call_propose(
+            summary="s", detail="d", action="a", domains=["x"], kind="pitfall",
+        )
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_propose_no_token_returns_none(self, monkeypatch):
+        monkeypatch.setenv("MCP_STOLPERSTEIN_PUBLIC_URL", "http://127.0.0.1:1")
+        monkeypatch.delenv("MCP_STOLPERSTEIN_API_KEY", raising=False)
+        result = await self.client.call_propose(
+            summary="s", detail="d", action="a", domains=["x"], kind="pitfall",
+        )
+        assert result is None
+
+    # --- success path (mocked transport) ---
+
+    @pytest.mark.asyncio
+    async def test_reflect_success_parses_response(self, monkeypatch):
+        monkeypatch.setenv("MCP_STOLPERSTEIN_PUBLIC_URL", "http://127.0.0.1:1")
+        monkeypatch.setenv("MCP_STOLPERSTEIN_API_KEY", "stmcp_test")
+
+        captured = {}
+
+        def fake_post(url, body, auth_header, timeout):
+            captured["url"] = url
+            captured["auth"] = auth_header
+            captured["body"] = body
+            captured["timeout"] = timeout
+            return {"candidates": [{"summary": "s"}], "method": "llm"}
+
+        monkeypatch.setattr(self.client, "_do_http_post", fake_post)
+        result = await self.client.call_reflect("my session summary")
+
+        assert result == {"candidates": [{"summary": "s"}], "method": "llm"}
+        assert captured["url"].endswith("/hook/reflect")
+        assert captured["auth"] == "Bearer stmcp_test"
+        assert b"my session summary" in captured["body"]
+        # reflect's default budget is longer than query's
+        assert captured["timeout"] >= 1.0
+
+    @pytest.mark.asyncio
+    async def test_propose_success_forwards_all_fields(self, monkeypatch):
+        monkeypatch.setenv("MCP_STOLPERSTEIN_PUBLIC_URL", "http://127.0.0.1:1")
+        monkeypatch.setenv("MCP_STOLPERSTEIN_API_KEY", "stmcp_test")
+
+        captured = {}
+
+        def fake_post(url, body, auth_header, timeout):
+            captured["url"] = url
+            captured["body"] = body
+            return {"ku": {"id": "ku_xyz"}, "duplicate_of": None, "message": None}
+
+        monkeypatch.setattr(self.client, "_do_http_post", fake_post)
+        result = await self.client.call_propose(
+            summary="s",
+            detail="d",
+            action="a",
+            domains=["python", "testing"],
+            kind="pitfall",
+            severity="high",
+            context_languages=["python"],
+            context_environment="py-3.12",
+        )
+
+        assert result["ku"]["id"] == "ku_xyz"
+        assert captured["url"].endswith("/hook/propose")
+        payload = json.loads(captured["body"])
+        assert payload["summary"] == "s"
+        assert payload["domains"] == ["python", "testing"]
+        assert payload["severity"] == "high"
+        assert payload["context_languages"] == ["python"]
+        assert payload["context_environment"] == "py-3.12"
+        # Unset optional fields stay out of the payload
+        assert "context_frameworks" not in payload
+        assert "context_pattern" not in payload
+
+    @pytest.mark.asyncio
+    async def test_propose_default_severity_is_medium(self, monkeypatch):
+        monkeypatch.setenv("MCP_STOLPERSTEIN_PUBLIC_URL", "http://127.0.0.1:1")
+        monkeypatch.setenv("MCP_STOLPERSTEIN_API_KEY", "stmcp_test")
+
+        captured = {}
+
+        def fake_post(url, body, auth_header, timeout):
+            captured["body"] = body
+            return {"ku": {"id": "ku_1"}, "duplicate_of": None, "message": None}
+
+        monkeypatch.setattr(self.client, "_do_http_post", fake_post)
+        await self.client.call_propose(
+            summary="s", detail="d", action="a", domains=["x"], kind="pitfall",
+        )
+        assert json.loads(captured["body"])["severity"] == "medium"
+
+    # --- error path (sanitized exceptions) ---
+
+    @pytest.mark.asyncio
+    async def test_reflect_timeout_raises_sanitized(self, monkeypatch):
+        monkeypatch.setenv("MCP_STOLPERSTEIN_PUBLIC_URL", "http://127.0.0.1:1")
+        monkeypatch.setenv("MCP_STOLPERSTEIN_API_KEY", "stmcp_secret_never_leak")
+
+        import time as _time
+
+        def slow_post(url, body, auth_header, timeout):
+            _time.sleep(2)  # longer than budget
+            return {}
+
+        monkeypatch.setattr(self.client, "_do_http_post", slow_post)
+        with pytest.raises(self.client.MCPUnreachable) as exc_info:
+            await self.client.call_reflect("x", budget_s=0.05)
+
+        msg = str(exc_info.value)
+        assert "stmcp_secret_never_leak" not in msg
+        assert "budget" in msg.lower() or "timeout" in msg.lower()
+
+    @pytest.mark.asyncio
+    async def test_propose_http_error_masks_token(self, monkeypatch):
+        monkeypatch.setenv("MCP_STOLPERSTEIN_PUBLIC_URL", "http://127.0.0.1:1")
+        monkeypatch.setenv("MCP_STOLPERSTEIN_API_KEY", "stmcp_secret_never_leak")
+
+        import urllib.error
+
+        def fail_post(url, body, auth_header, timeout):
+            # Simulate a server-returned 401 with bearer in body (worst case).
+            raise urllib.error.HTTPError(
+                url, 401, f"Unauthorized: {auth_header}", hdrs={}, fp=None,
+            )
+
+        monkeypatch.setattr(self.client, "_do_http_post", fail_post)
+        with pytest.raises(self.client.MCPUnreachable) as exc_info:
+            await self.client.call_propose(
+                summary="s", detail="d", action="a",
+                domains=["x"], kind="pitfall",
+            )
+
+        msg = str(exc_info.value)
+        assert "stmcp_secret_never_leak" not in msg
+        assert msg == "HTTP 401"
+
+
 class TestHooksDisabledEnv:
     """The STOLPERSTEIN_HOOKS_DISABLED escape hatch."""
 

@@ -63,8 +63,9 @@ async def _llm_extract(session_summary: str) -> list[ReflectCandidate] | None:
 
     url = settings.cq_llm_api_url.rstrip("/") + "/chat/completions"
     headers = {"Content-Type": "application/json"}
-    if settings.cq_llm_api_key:
-        headers["Authorization"] = f"Bearer {settings.cq_llm_api_key}"
+    llm_key = settings.cq_llm_api_key.get_secret_value()
+    if llm_key:
+        headers["Authorization"] = f"Bearer {llm_key}"
 
     payload = {
         "model": settings.cq_llm_model,

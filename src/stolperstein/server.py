@@ -33,7 +33,7 @@ def _build_auth():
     api_key = settings.ensure_api_key()
 
     # Bearer-only mode (the current CDiT fleet pattern — MCP Portal in front).
-    if not settings.cf_access_client_secret:
+    if not settings.cf_access_client_secret.get_secret_value():
         logger = logging.getLogger(__name__)
         logger.info("CF Access OIDC disabled; bearer-token auth only")
         return create_bearer_only_auth(api_key=api_key, base_url=settings.base_url)
@@ -43,7 +43,7 @@ def _build_auth():
         base_url=settings.base_url,
         cf_access_config_url=settings.cf_access_config_url,
         cf_access_client_id=settings.cf_access_client_id,
-        cf_access_client_secret=settings.cf_access_client_secret,
+        cf_access_client_secret=settings.cf_access_client_secret.get_secret_value(),
     )
 
 
@@ -105,7 +105,7 @@ async def _hook_authorize(request):
     if settings.transport != "http":
         return None, JSONResponse({"error": "http transport required"}, status_code=503)
 
-    api_key = settings.mcp_stolperstein_api_key
+    api_key = settings.mcp_stolperstein_api_key.get_secret_value()
     if not api_key:
         return None, JSONResponse(
             {"error": "server has no API key configured"}, status_code=503

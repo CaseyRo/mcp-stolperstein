@@ -40,11 +40,13 @@ async def _body(response) -> dict:
 @pytest.fixture
 def http_settings(monkeypatch):
     """Force the server into HTTP mode with a known API key for this test."""
+    from pydantic import SecretStr
+
     monkeypatch.setenv("TRANSPORT", "http")
     monkeypatch.setenv("MCP_STOLPERSTEIN_API_KEY", "stmcp_test_key")
     from stolperstein.config import settings as cfg
     monkeypatch.setattr(cfg, "transport", "http")
-    monkeypatch.setattr(cfg, "mcp_stolperstein_api_key", "stmcp_test_key")
+    monkeypatch.setattr(cfg, "mcp_stolperstein_api_key", SecretStr("stmcp_test_key"))
     return cfg
 
 

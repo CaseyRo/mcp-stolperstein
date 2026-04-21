@@ -23,13 +23,13 @@ class Settings(BaseSettings):
     port: int = 8716
 
     # MCP server auth
-    mcp_stolperstein_api_key: str = ""
+    mcp_stolperstein_api_key: SecretStr = SecretStr("")
     mcp_stolperstein_public_url: str = ""
 
     # Cloudflare Access OIDC (replaces Keycloak)
     cf_access_team: str = ""
     cf_access_client_id: str = ""
-    cf_access_client_secret: str = ""
+    cf_access_client_secret: SecretStr = SecretStr("")
 
     # Embeddings
     cq_embedding_model: str = "all-MiniLM-L6-v2"
@@ -37,7 +37,7 @@ class Settings(BaseSettings):
 
     # LLM for reflect tool (OpenAI-compatible chat completions endpoint)
     cq_llm_api_url: str = ""  # e.g. https://api.openai.com/v1 or local endpoint
-    cq_llm_api_key: str = ""
+    cq_llm_api_key: SecretStr = SecretStr("")
     cq_llm_model: str = "gpt-4o-mini"
 
     # CQ team sync (optional)
@@ -77,13 +77,14 @@ class Settings(BaseSettings):
 
     def ensure_api_key(self) -> str:
         """Return the API key, generating one if not configured."""
-        if self.mcp_stolperstein_api_key:
-            return self.mcp_stolperstein_api_key
+        existing = self.mcp_stolperstein_api_key.get_secret_value()
+        if existing:
+            return existing
 
         from stolperstein.auth import generate_api_key
 
         key = generate_api_key()
-        self.mcp_stolperstein_api_key = key
+        self.mcp_stolperstein_api_key = SecretStr(key)
         logger.warning(
             "Generated API key: %s (set MCP_STOLPERSTEIN_API_KEY to persist)", key
         )

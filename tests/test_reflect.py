@@ -228,9 +228,10 @@ class TestLLMExtraction:
             "stolperstein.config.settings.cq_llm_api_url",
             "http://fake-llm:8080/v1",
         )
+        from pydantic import SecretStr
         monkeypatch.setattr(
             "stolperstein.config.settings.cq_llm_api_key",
-            "test-key",
+            SecretStr("test-key"),
         )
         monkeypatch.setattr(
             "stolperstein.config.settings.cq_llm_model",

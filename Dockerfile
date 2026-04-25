@@ -1,4 +1,4 @@
-FROM python:3.12-slim AS builder
+FROM python:3.14-slim AS builder
 
 WORKDIR /app
 COPY pyproject.toml README.md ./
@@ -14,7 +14,7 @@ RUN pip install --no-cache-dir --extra-index-url https://download.pytorch.org/wh
 # Pre-download the embedding model at build time
 RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
 
-FROM python:3.12-slim
+FROM python:3.14-slim
 
 WORKDIR /app
 

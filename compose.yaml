@@ -28,6 +28,11 @@ services:
     volumes:
       - stolperstein-data:/data
       - fastmcp-data:/data/fastmcp
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   stolperstein-data:

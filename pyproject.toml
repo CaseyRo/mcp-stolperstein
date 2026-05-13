@@ -7,12 +7,15 @@ license = "MIT"
 requires-python = ">=3.12"
 authors = [{ name = "Casey Romkes" }]
 dependencies = [
-    "fastmcp>=3.1.0",
+    "fastmcp>=3.2.4",
     "httpx>=0.28.0",
     "pydantic>=2.10",
     "pydantic-settings>=2.12.0",
     "sqlite-vec>=0.1.6",
     "sentence-transformers>=3.0.0",
+    # Security floors (transitive deps of fastmcp; pinned to address CVEs)
+    "authlib>=1.7.0",            # GHSA: CSRF in token cache handling
+    "python-multipart>=0.0.27",  # GHSA: DoS via unbounded multipart headers
 ]
 
 [project.scripts]

@@ -7,7 +7,7 @@ license = "MIT"
 requires-python = ">=3.12"
 authors = [{ name = "Casey Romkes" }]
 dependencies = [
-    "fastmcp>=3.2.4",
+    "fastmcp>=3.3.1",
     "httpx>=0.28.0",
     "pydantic>=2.10",
     "pydantic-settings>=2.12.0",

@@ -36,8 +36,8 @@ testpaths = ["tests"]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.24",
-    "hypothesis>=6.0",
-    "ruff>=0.8",
+    "hypothesis>=6.152.9",
+    "ruff>=0.15.14",
     "mypy>=1.10",
     "jsonschema>=4.23",
 ]

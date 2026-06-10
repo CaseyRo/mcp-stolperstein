@@ -7,11 +7,52 @@ import logging
 import sys
 from pathlib import Path
 
-from fastmcp import FastMCP
+from fastmcp import Context, FastMCP
 from mcp.types import Icon, ToolAnnotations
 
 from stolperstein.auth import create_auth, create_bearer_only_auth
 from stolperstein.config import settings
+from stolperstein.models import (
+    KUResponse,
+    QueryResult,
+    ReflectResult,
+    StatusReport,
+)
+
+SERVER_INSTRUCTIONS = """\
+Stolperstein is an experiential knowledge base for AI coding agents. It stores
+"Knowledge Units" (KUs) — generalizable pitfalls, workarounds, and
+tool-recommendations discovered while working — so a *different* agent on a
+*different* project can recall them later. The internal model is a superset of
+Mozilla AI's `cq` schema (see the `cq://` resources for the strict schema and
+the Stolperstein extension registry).
+
+Lifecycle: propose -> confirm -> flag, with query and reflect alongside.
+
+- query(text, ...): READ. Always call this FIRST when you hit an error, an
+  unfamiliar API, or a tech stack — recall before you rediscover. Returns
+  ranked KUs (hybrid FTS5 + vector search).
+- propose(...): WRITE. Capture a NEW learning. Requires summary/detail/action,
+  a non-empty domains[] tag list, and a kind. Duplicate-detected automatically.
+- confirm(ku_id): WRITE. You hit a KU's situation and its advice held — bump
+  its confidence. NOT idempotent (each call increments confirmations).
+- flag(ku_id, reason, ...): WRITE. A KU is wrong/stale/superseded/duplicate.
+  `superseded` and `duplicate` ARCHIVE the KU (destructive); `incorrect`/
+  `dangerous` mark it disputed; `stale` marks it stale.
+- reflect(session_summary): READ. End-of-session helper — extracts ranked
+  candidate KUs (pre-filled context_* + severity) you can pass straight to
+  propose(). Slow when an LLM endpoint is configured; reports progress.
+- status(debug=False): READ. Store health (counts, confidence, staleness).
+
+Vocabulary:
+- kind: pitfall | workaround | tool-recommendation. (`tool-gap-signal` is
+  emergent-only; `gap-signal` is deprecated.)
+- severity: low | medium | high | critical (ranking tiebreaker + decay floor).
+- flag reason: stale | incorrect | superseded | dangerous | duplicate.
+
+Prefer query() before any non-trivial task; prefer reflect()->propose() to
+capture durable learnings at session end.
+"""
 
 
 def _build_auth():
@@ -49,6 +90,7 @@ def _build_auth():
 
 mcp = FastMCP(
     "mcp-stolperstein",
+    instructions=SERVER_INSTRUCTIONS,
     auth=_build_auth(),
     icons=[
         Icon(
@@ -58,6 +100,31 @@ mcp = FastMCP(
         ),
     ],
 )
+
+
+async def _ctx_info(ctx: Context | None, message: str) -> None:
+    """Best-effort `ctx.info`. Never let progress/logging break a tool call.
+
+    `ctx.info`/`ctx.report_progress` require an established MCP session; when a
+    tool is invoked outside one (e.g. in-process calls), they raise. Logging is
+    advisory, so swallow those failures rather than fail the underlying work.
+    """
+    if ctx is None:
+        return
+    try:
+        await ctx.info(message)
+    except Exception:
+        logging.getLogger(__name__).debug("ctx.info unavailable", exc_info=True)
+
+
+async def _ctx_progress(ctx: Context | None, progress: float, total: float) -> None:
+    """Best-effort `ctx.report_progress` (see `_ctx_info`)."""
+    if ctx is None:
+        return
+    try:
+        await ctx.report_progress(progress=progress, total=total)
+    except Exception:
+        logging.getLogger(__name__).debug("ctx.report_progress unavailable", exc_info=True)
 
 
 @mcp.custom_route("/health", methods=["GET"])
@@ -256,13 +323,20 @@ async def hook_propose(request):
     return JSONResponse(result)
 
 
-@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True))
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Query knowledge units",
+        readOnlyHint=True,
+        idempotentHint=True,
+        openWorldHint=False,
+    )
+)
 async def query(
     text: str,
     domain: list[str] | None = None,
     confidence_min: float = 0.3,
     limit: int = 10,
-) -> dict:
+) -> QueryResult:
     """Search knowledge units by natural language, error signatures, or technology tags.
 
     Uses hybrid search combining FTS5 keyword relevance and vector cosine similarity.
@@ -281,12 +355,20 @@ async def query(
         including context, evidence.severity, provenance, and owner_org.
     """
     from stolperstein.store import store
-    return await store.query(
+    result = await store.query(
         text=text, domain=domain, confidence_min=confidence_min, limit=limit
     )
+    return QueryResult.model_validate(result)
 
 
-@mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, idempotentHint=False))
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Propose a knowledge unit",
+        readOnlyHint=False,
+        idempotentHint=False,
+        openWorldHint=False,
+    )
+)
 async def propose(
     summary: str,
     detail: str,
@@ -298,7 +380,8 @@ async def propose(
     context_environment: str | None = None,
     context_pattern: str | None = None,
     severity: str = "medium",
-) -> dict:
+    ctx: Context | None = None,
+) -> KUResponse:
     """Propose a new Knowledge Unit from a discovered insight.
 
     Args:
@@ -335,7 +418,8 @@ async def propose(
         )
     """
     from stolperstein.store import store
-    return await store.propose(
+    await _ctx_info(ctx, f"Proposing {kind} KU across domains={domains}")
+    result = await store.propose(
         summary=summary,
         detail=detail,
         action=action,
@@ -347,10 +431,22 @@ async def propose(
         context_pattern=context_pattern,
         severity=severity,
     )
+    if result.get("duplicate_of"):
+        await _ctx_info(ctx, f"Duplicate of existing KU {result['duplicate_of']}; not re-created")
+    else:
+        await _ctx_info(ctx, f"Created KU {result['ku']['id']}")
+    return KUResponse.model_validate(result)
 
 
-@mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, idempotentHint=False))
-async def confirm(ku_id: str) -> dict:
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Confirm a knowledge unit",
+        readOnlyHint=False,
+        idempotentHint=False,
+        openWorldHint=False,
+    )
+)
+async def confirm(ku_id: str, ctx: Context | None = None) -> KUResponse:
     """Confirm an existing Knowledge Unit — increments confirmations and confidence.
 
     NOT idempotent: calling twice increments confirmations twice and changes the
@@ -362,19 +458,35 @@ async def confirm(ku_id: str) -> dict:
             InvalidParams error with guidance to call query() first.
     """
     from stolperstein.store import store
-    return await store.confirm(ku_id=ku_id)
+    result = await store.confirm(ku_id=ku_id)
+    await _ctx_info(
+        ctx, f"Confirmed {ku_id}: confidence now {result['ku']['evidence']['confidence']}"
+    )
+    return KUResponse.model_validate(result)
 
 
-@mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, idempotentHint=False))
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Flag a knowledge unit",
+        readOnlyHint=False,
+        idempotentHint=False,
+        destructiveHint=True,
+        openWorldHint=False,
+    )
+)
 async def flag(
     ku_id: str,
     reason: str,
     detail: str = "",
     superseded_by: str | None = None,
-) -> dict:
+    ctx: Context | None = None,
+) -> KUResponse:
     """Flag a Knowledge Unit as stale, incorrect, superseded, dangerous, or duplicate.
 
     NOT idempotent: transitions state and updates the KU's flags/superseded_by.
+    Potentially DESTRUCTIVE: `superseded` and `duplicate` archive the KU (it
+    drops out of query results); `incorrect`/`dangerous` mark it disputed and
+    cap its confidence; `stale` marks it stale.
 
     Args:
         ku_id: The KU's id.
@@ -386,13 +498,24 @@ async def flag(
             or `duplicate`.
     """
     from stolperstein.store import store
-    return await store.flag(
+    result = await store.flag(
         ku_id=ku_id, reason=reason, detail=detail, superseded_by=superseded_by
     )
+    await _ctx_info(
+        ctx, f"Flagged {ku_id} as {reason}; status now {result['ku']['status']}"
+    )
+    return KUResponse.model_validate(result)
 
 
-@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True))
-async def reflect(session_summary: str) -> dict:
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Reflect on a session for candidate KUs",
+        readOnlyHint=True,
+        idempotentHint=True,
+        openWorldHint=True,  # may call a configured external LLM endpoint
+    )
+)
+async def reflect(session_summary: str, ctx: Context | None = None) -> ReflectResult:
     """Extract generalizable learnings from a session summary.
 
     Returns ranked candidate KUs scored by generalizability, each pre-filled
@@ -406,11 +529,27 @@ async def reflect(session_summary: str) -> dict:
     """
     from stolperstein.reflect import reflect_with_dedup
     from stolperstein.store import store
-    return await reflect_with_dedup(session_summary, store=store)
+    await _ctx_info(ctx, "Extracting candidate KUs from session summary")
+    await _ctx_progress(ctx, 0, 1)
+    result = await reflect_with_dedup(session_summary, store=store)
+    await _ctx_progress(ctx, 1, 1)
+    await _ctx_info(
+        ctx,
+        f"Extracted {len(result.get('candidates', []))} candidate(s) "
+        f"via {result.get('method', 'none')}",
+    )
+    return ReflectResult.model_validate(result)
 
 
-@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True))
-async def status(debug: bool = False) -> dict:
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Report store health",
+        readOnlyHint=True,
+        idempotentHint=True,
+        openWorldHint=False,
+    )
+)
+async def status(debug: bool = False) -> StatusReport:
     """Report store health.
 
     Default (token-frugal): total, by_status, confidence_distribution, staleness,
@@ -421,7 +560,208 @@ async def status(debug: bool = False) -> dict:
     window size. Use for operator troubleshooting, not routine agent calls.
     """
     from stolperstein.store import store
-    return await store.status(debug=debug)
+    result = await store.status(debug=debug)
+    return StatusReport.model_validate(result)
+
+
+# --- Resources: reference/context data agents can pull without a tool call ---
+
+
+@mcp.resource(
+    "stolperstein://vocabulary",
+    name="KU vocabulary",
+    description="Valid kind / severity / status / flag-reason values for KUs, "
+    "with selection guidance — ground propose()/flag() inputs against this.",
+    mime_type="application/json",
+)
+def vocabulary_resource() -> dict:
+    """Closed vocabularies the tools accept, derived from the live enums.
+
+    Lets an agent pick a valid `kind`, `severity`, or flag `reason` before
+    calling propose()/flag() instead of discovering them via a failed call.
+    """
+    from stolperstein.models import KUKind, KUSeverity, KUStatus
+
+    return {
+        "kind": {
+            "proposable": ["pitfall", "workaround", "tool-recommendation"],
+            "emergent_only": ["tool-gap-signal"],
+            "deprecated": ["gap-signal"],
+            "guidance": {
+                "pitfall": "A surprising/undocumented behavior that bites you.",
+                "workaround": "A concrete fix or detour around a problem.",
+                "tool-recommendation": "Prefer tool/library/approach X for Y.",
+            },
+            "all_values": [k.value for k in KUKind],
+        },
+        "severity": {
+            "values": [s.value for s in KUSeverity],
+            "default": "medium",
+            "note": "Ranking tiebreaker + decay floor; 'critical' KUs never "
+            "fully decay.",
+        },
+        "status": {
+            "values": [s.value for s in KUStatus],
+            "note": "Lifecycle state machine (Stolperstein extension). Set by "
+            "the server, not the caller.",
+        },
+        "flag_reason": {
+            "values": ["stale", "incorrect", "superseded", "dangerous", "duplicate"],
+            "archives": ["superseded", "duplicate"],
+            "disputes": ["incorrect", "dangerous"],
+            "requires_superseded_by": ["superseded", "duplicate"],
+        },
+    }
+
+
+@mcp.resource(
+    "cq://extensions",
+    name="CQ extension registry",
+    description="Registry of Stolperstein fields that extend the upstream "
+    "mozilla-ai/cq schema (carried in rich output, stripped in strict).",
+    mime_type="text/markdown",
+)
+def cq_extensions_resource() -> str:
+    """The `docs/cq-extensions.md` registry, or a built-in summary if absent.
+
+    Distinguishes upstream-conformant fields from Stolperstein extensions so a
+    consumer knows what survives `to_cq_json_strict()` onto the wire.
+    """
+    doc = (
+        Path(__file__).parent.parent.parent / "docs" / "cq-extensions.md"
+    )
+    try:
+        return doc.read_text()
+    except OSError:
+        return (
+            "# Stolperstein CQ extensions\n\n"
+            "Extensions carried in rich output but stripped by "
+            "`to_cq_json_strict()` before any wire transmission:\n"
+            "- `evidence.severity`, `evidence.contributing_orgs`\n"
+            "- `context.environment`\n"
+            "- top-level `kind`, `status`, `staleness_policy`, `related[]`, "
+            "`owner_org`\n"
+            "- `provenance.proposer_did` (emitted as upstream `created_by`), "
+            "`provenance.graduation_history`, `provenance.emergent`\n\n"
+            "See docs/cq-extensions.md in the repo for the canonical registry."
+        )
+
+
+@mcp.resource(
+    "cq://schema/knowledge-unit",
+    name="CQ knowledge-unit schema",
+    description="The vendored upstream mozilla-ai/cq JSON Schema that "
+    "to_cq_json_strict() output validates against.",
+    mime_type="application/json",
+)
+def cq_schema_resource() -> dict:
+    """The vendored strict CQ schema, or a note if it isn't bundled.
+
+    Lets agents and downstreams ground strict-wire payloads against the same
+    schema the inbound-sync validator uses.
+    """
+    try:
+        from stolperstein.sync.cq_team import _load_schema
+
+        return _load_schema()
+    except Exception as e:  # schema file not packaged in this deployment
+        return {
+            "error": "schema_unavailable",
+            "detail": type(e).__name__,
+            "note": "The vendored CQ schema is not bundled in this deployment. "
+            "See the cq:// extensions resource for the field registry.",
+        }
+
+
+@mcp.resource(
+    "stolperstein://status",
+    name="Store status snapshot",
+    description="Read-only token-frugal store health snapshot (counts, "
+    "confidence distribution, staleness) — same shape as status().",
+    mime_type="application/json",
+)
+async def status_resource() -> dict:
+    """Live store health as a resource, so agents can pull it as context
+    without spending a tool call. Frugal (non-debug) shape only.
+    """
+    from stolperstein.store import store
+
+    return await store.status(debug=False)
+
+
+# --- Prompts: guided multi-step workflows ---
+
+
+@mcp.prompt(
+    name="capture-learning",
+    description="Guide an agent from a session summary through reflect() "
+    "candidates to clean propose() calls for durable learnings.",
+)
+def capture_learning_prompt(session_summary: str = "") -> str:
+    """Reflect -> propose capture workflow.
+
+    Args:
+        session_summary: What happened this session (errors hit, fixes found,
+            tools that helped). Leave empty to have the agent summarize first.
+    """
+    summary_block = (
+        f"Session summary to mine:\n\n{session_summary}\n"
+        if session_summary.strip()
+        else "First, write a 1-2 paragraph summary of what happened this "
+        "session (errors hit, root causes, fixes, tools that helped).\n"
+    )
+    return (
+        "You are capturing durable, transferable knowledge into the "
+        "Stolperstein knowledge base.\n\n"
+        f"{summary_block}\n"
+        "Steps:\n"
+        "1. Call `reflect(session_summary=...)` to get ranked candidate KUs "
+        "(each carries summary/detail/action, domains, kind, severity, "
+        "context_*).\n"
+        "2. Keep only candidates that would help a DIFFERENT agent on a "
+        "DIFFERENT project — drop anything project-specific. Prefer "
+        "generalizability_score >= 0.5.\n"
+        "3. For each keeper, first `query(text=<summary>)` to avoid duplicating "
+        "an existing KU. If a near-match exists and its advice held, "
+        "`confirm(ku_id=...)` instead of proposing.\n"
+        "4. Otherwise `propose(...)` using the candidate's pre-filled fields. "
+        "Keep `action` imperative and free of angle brackets.\n"
+        "5. Report which KUs you proposed/confirmed and which you skipped and "
+        "why.\n\n"
+        "Valid kinds: pitfall | workaround | tool-recommendation. "
+        "Severity: low | medium | high | critical."
+    )
+
+
+@mcp.prompt(
+    name="recall-before-task",
+    description="Recall relevant prior pitfalls/workarounds before starting a "
+    "task, and confirm/flag KUs based on what actually happened.",
+)
+def recall_before_task_prompt(task: str = "", tech: str = "") -> str:
+    """Query-first workflow for the start of a task.
+
+    Args:
+        task: What you are about to do (e.g. "wire up Cloudflare Access OIDC").
+        tech: Optional comma-separated tech tags to narrow recall
+            (e.g. "cloudflare, oidc, fastmcp").
+    """
+    domains = [t.strip() for t in tech.split(",") if t.strip()]
+    domain_hint = (
+        f" Pass domain={domains} to narrow results." if domains else ""
+    )
+    task_line = task.strip() or "the task you are about to start"
+    return (
+        "Before doing the work, recall what past sessions already learned.\n\n"
+        f"1. Call `query(text=\"{task_line}\")`.{domain_hint}\n"
+        "2. Read the returned KUs (mind evidence.severity and confidence). "
+        "Apply any that fit BEFORE you start.\n"
+        "3. As you work: if a KU's advice held, `confirm(ku_id=...)`. If a KU "
+        "is wrong or outdated, `flag(ku_id=..., reason=...)` "
+        "(stale|incorrect|superseded|dangerous|duplicate).\n"
+        "4. If you hit something none of the KUs covered, note it for an "
+        "end-of-task `reflect()` -> `propose()` capture pass.\n"
+    )
 
 
 # --- CLI subcommands ---

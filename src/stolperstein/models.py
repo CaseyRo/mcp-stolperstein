@@ -22,7 +22,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_serializer
 
 
 class KUKind(str, Enum):
@@ -352,6 +352,58 @@ class StoreStatusDebug(StoreStatus):
     by_owner_org: dict[str, int]
     recent_emergent: list[str]  # KU ids
     query_misses_window: int
+
+
+class StatusReport(StoreStatus):
+    """Tool-facing status return.
+
+    Superset of `StoreStatus`: the token-frugal fields are always present;
+    the operator/debug fields are optional and only populated when the
+    `status` tool is called with `debug=True`. `None` debug fields are
+    dropped on serialization so the `debug=False` payload stays byte-for-byte
+    identical to the legacy frugal dict.
+    """
+
+    schema_version: int | None = None
+    proposer_did: str | None = None
+    applied_migrations: list[str] | None = None
+    by_owner_org: dict[str, int] | None = None
+    recent_emergent: list[str] | None = None  # KU ids
+    query_misses_window: int | None = None
+
+    @model_serializer(mode="wrap")
+    def _drop_none_debug(self, handler):  # type: ignore[no-untyped-def]
+        data = handler(self)
+        return {k: v for k, v in data.items() if v is not None}
+
+
+class QueryResult(BaseModel):
+    """Typed result of `query()` — ranked KUs plus a count.
+
+    Matches the legacy `{"results": [...], "count": N}` wire shape exactly;
+    declaring it as the tool return lets fastmcp advertise an output schema so
+    clients can reason about KU shape without parsing the docstring.
+    """
+
+    results: list[KnowledgeUnit] = Field(default_factory=list)
+    count: int = 0
+
+
+class ReflectResult(BaseModel):
+    """Typed result of `reflect()` — ranked candidate KUs plus metadata.
+
+    Each candidate is a `ReflectCandidate` (flat `context_*` + `severity`)
+    ready to pass straight to `propose()`.
+    """
+
+    candidates: list[ReflectCandidate] = Field(default_factory=list)
+    method: str | None = None  # "llm" | "heuristic"; absent when no candidates
+    message: str | None = None
+
+    @model_serializer(mode="wrap")
+    def _drop_none(self, handler):  # type: ignore[no-untyped-def]
+        data = handler(self)
+        return {k: v for k, v in data.items() if v is not None}
 
 
 class ReflectCandidate(BaseModel):

@@ -556,9 +556,10 @@ class TestOnStopReflectViaHook:
             _StdinStub(json.dumps({"transcript_path": str(transcript)})),
         )
         assert mod.run() == 0
-        err = capsys.readouterr().err
-        # Nudge should NOT be printed when the hook handles it
-        assert "Run `/stolperstein:reflect`" not in err
+        captured_io = capsys.readouterr()
+        # Nudge should NOT be emitted when the hook handles it
+        assert "Run `/stolperstein:reflect`" not in captured_io.out
+        assert "Run `/stolperstein:reflect`" not in captured_io.err
         # Summary was derived and passed
         assert "summary" in captured
         assert "tool-call turns" in captured["summary"]
@@ -574,9 +575,11 @@ class TestOnStopReflectViaHook:
             _StdinStub(json.dumps({"transcript_path": str(transcript)})),
         )
         assert mod.run() == 0
-        err = capsys.readouterr().err
-        # Original nudge behavior is preserved
-        assert "Run `/stolperstein:reflect`" in err
+        out = capsys.readouterr().out
+        # Nudge is delivered via the hook JSON systemMessage field — Stop-hook
+        # stderr is not shown to the user on exit 0.
+        payload = json.loads(out)
+        assert "Run `/stolperstein:reflect`" in payload["systemMessage"]
 
     def test_opt_in_below_threshold_is_silent(self, monkeypatch, tmp_path, capsys):
         monkeypatch.setenv("CLAUDE_SESSION_ID", "test-opt-in-short-" + tmp_path.name)

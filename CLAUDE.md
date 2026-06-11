@@ -52,7 +52,7 @@ Stolperstein extensions (all local-only, all documented in `docs/cq-extensions.m
 
 **Sync (`sync/`).** `cq_team.py` emits strict-CQ on graduation and validates inbound payloads against the vendored schema before sanitizing + storing. `siyuan.py` honors `CQ_SIYUAN_SCHEMA_VERSION` (0 = legacy shape during transition). Both are gated behind env and fully optional.
 
-**Hook handlers (`plugin/stolperstein/hooks/handlers/`).** `on_prompt.py`, `on_bash.py`, `on_stop.py` + shared helpers (`_client.py`, `_rate_limit.py`, `_inject.py`, `_signals.py`). Require the server reachable over HTTP — hooks use `MCP_STOLPERSTEIN_PUBLIC_URL` + `MCP_STOLPERSTEIN_API_KEY`. Handlers share stdlib-only code where possible; `_client.py` imports `fastmcp.Client` for the MCP round-trip (500ms budget, bearer-token sanitization in traceback surfaces).
+**Hook handlers (`plugin/stolperstein/hooks/handlers/`).** `on_prompt.py`, `on_bash.py`, `on_stop.py` + shared helpers (`_client.py`, `_rate_limit.py`, `_inject.py`, `_signals.py`, `_debug.py`). Require the server reachable over HTTP — hooks use `MCP_STOLPERSTEIN_PUBLIC_URL` + `MCP_STOLPERSTEIN_API_KEY`. Handlers are fully stdlib (no fastmcp import — Claude Code runs them with whatever `python3` is on $PATH); `_client.py` POSTs to the `/hook/*` REST endpoints (1.5s query budget, bearer-token sanitization in error surfaces). All decisions are traceable via `STOLPERSTEIN_HOOKS_DEBUG=1` → `$TMPDIR/stolperstein-hooks-debug.jsonl`; user-facing Stop-hook output must go through the JSON `systemMessage` field (stderr is invisible on exit 0).
 
 ## Adding a new MCP tool
 

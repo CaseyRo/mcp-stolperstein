@@ -5,16 +5,21 @@ least one non-zero bash exit OR one flag()/confirm() call.
 
 Two modes:
 
-- **Default**: prints a one-line nudge to stderr telling the user to
-  invoke `/stolperstein:reflect` manually. The skill then drives the
-  model through the reflect → propose flow.
+- **Default**: emits a one-line nudge telling the user to invoke
+  `/stolperstein:reflect` manually. The skill then drives the model
+  through the reflect → propose flow.
 - **Opt-in via STOLPERSTEIN_REFLECT_VIA_HOOK=true**: skips the nudge,
   derives a local session summary, and POSTs directly to the server's
   /hook/reflect endpoint (bypassing the MCP Portal and Anthropic's
   connector relay). Fire-and-forget — failures go to the unreachable
   marker, nothing is printed.
 
-Also prints a one-time "Stolperstein unreachable" notice if any prior hook
+User-facing output goes through the `systemMessage` field of the hook's
+JSON stdout — Claude Code does NOT display a Stop hook's stderr on exit 0,
+so stderr prints are invisible (this silently ate every nudge and
+unreachable notice in plugin ≤1.0.6).
+
+Also emits a one-time "Stolperstein unreachable" notice if any prior hook
 attempt in this session failed to reach the MCP server. Safe to call on
 short/exploratory sessions — prints nothing when the bar isn't met.
 
@@ -31,6 +36,10 @@ import os
 import sys
 import tempfile
 from pathlib import Path
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from _debug import trace  # noqa: E402
 
 _HOOK_NAME = "Stop"
 _DEFAULT_THRESHOLD = 20
@@ -62,8 +71,13 @@ def _reflect_via_hook_enabled() -> bool:
     return val in {"1", "true", "yes", "on"}
 
 
-def _unreachable_marker() -> Path:
-    session_id = os.environ.get("CLAUDE_SESSION_ID") or "default"
+def _session_id(event: dict) -> str:
+    """Claude Code passes `session_id` in the hook event payload (there is
+    no CLAUDE_SESSION_ID env var); the env fallback keeps old tests working."""
+    return event.get("session_id") or os.environ.get("CLAUDE_SESSION_ID") or "default"
+
+
+def _unreachable_marker(session_id: str) -> Path:
     return Path(tempfile.gettempdir()) / f"stolperstein-unreachable-{session_id}"
 
 
@@ -160,29 +174,42 @@ def _derive_session_summary(
     return "\n".join(lines)
 
 
-def _print_unreachable_notice() -> None:
-    marker = _unreachable_marker()
-    if marker.exists():
-        print(
-            "Stolperstein was unreachable during this session — "
-            "hook-based queries were skipped.",
-            file=sys.stderr,
-        )
-        try:
-            marker.unlink()
-        except OSError:
-            pass
+def _consume_unreachable_notice(session_id: str) -> str | None:
+    """Return the unreachable notice (and clear the marker) if one is due."""
+    marker = _unreachable_marker(session_id)
+    if not marker.exists():
+        return None
+    try:
+        marker.unlink()
+    except OSError:
+        pass
+    return (
+        "Stolperstein was unreachable during this session — "
+        "hook-based queries were skipped."
+    )
 
 
-def _mark_unreachable() -> None:
+def _emit_system_message(*parts: str | None) -> None:
+    """Surface text to the user via the hook JSON `systemMessage` field.
+
+    Stop-hook stderr is swallowed by Claude Code on exit 0; this is the
+    only channel that reliably reaches the user.
+    """
+    messages = [p for p in parts if p]
+    if not messages:
+        return
+    print(json.dumps({"systemMessage": " ".join(messages)}))
+
+
+def _mark_unreachable(session_id: str) -> None:
     """Write the unreachable marker so the next Stop hook reports it."""
     try:
-        _unreachable_marker().touch(exist_ok=True)
+        _unreachable_marker(session_id).touch(exist_ok=True)
     except OSError:
         pass
 
 
-async def _call_reflect_safely(summary: str) -> None:
+async def _call_reflect_safely(summary: str, session_id: str) -> None:
     """Call /hook/reflect with all failures swallowed — fire-and-forget.
 
     The reflect endpoint's LLM-backed candidate extraction is best-effort
@@ -192,14 +219,14 @@ async def _call_reflect_safely(summary: str) -> None:
     try:
         from _client import MCPUnreachable, call_reflect
     except Exception:
-        _mark_unreachable()
+        _mark_unreachable(session_id)
         return
     try:
         await call_reflect(summary)
     except MCPUnreachable:
-        _mark_unreachable()
+        _mark_unreachable(session_id)
     except Exception:
-        _mark_unreachable()
+        _mark_unreachable(session_id)
 
 
 async def _run() -> int:
@@ -211,22 +238,31 @@ async def _run() -> int:
     except json.JSONDecodeError:
         event = {}
 
-    _print_unreachable_notice()
+    session_id = _session_id(event)
+    notice = _consume_unreachable_notice(session_id)
 
     transcript_path = event.get("transcript_path") or event.get("transcriptPath")
     if not transcript_path or not os.path.exists(transcript_path):
+        _emit_system_message(notice)
         return 0
 
     tool_turns, substantive, tool_names, error_snippets = _analyze_transcript(transcript_path)
     if tool_turns < _threshold() or not substantive:
+        trace(_HOOK_NAME, "below-threshold", tool_turns=tool_turns, substantive=substantive)
+        _emit_system_message(notice)
         return 0
 
     if _reflect_via_hook_enabled():
         summary = _derive_session_summary(tool_turns, tool_names, error_snippets)
-        await _call_reflect_safely(summary)
+        await _call_reflect_safely(summary, session_id)
+        trace(_HOOK_NAME, "reflect-via-hook", tool_turns=tool_turns)
+        _emit_system_message(notice)
         return 0
 
-    print("Run `/stolperstein:reflect` to capture session learnings.", file=sys.stderr)
+    trace(_HOOK_NAME, "nudge", tool_turns=tool_turns)
+    _emit_system_message(
+        notice, "Run `/stolperstein:reflect` to capture session learnings."
+    )
     return 0
 
 
@@ -237,7 +273,7 @@ def run() -> int:
     except Exception:
         # Never let a hook failure propagate up; worst case, mark the
         # session as having had an unreachable attempt and move on.
-        _mark_unreachable()
+        _mark_unreachable("default")
         return 0
 
 

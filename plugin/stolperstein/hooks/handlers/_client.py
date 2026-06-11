@@ -14,9 +14,11 @@ Design:
   gets `del`-eted after the request. The exception handler never propagates
   the raw header; sanitized errors are raised via `MCPUnreachable`.
 - **Budgets.** Per-helper timeout ceiling. Missed deadline → abandon.
-  `call_query` defaults to 500ms (fast FTS5 + vec0 search). `call_reflect`
-  defaults to 5s (LLM-backed candidate extraction). `call_propose` defaults
-  to 1.5s (DB insert + dedupe scan).
+  `call_query` defaults to 1.5s (TLS handshake + Cloudflare proxy RTT is
+  ~200-400ms before the server even starts the FTS5 + vec0 search; the
+  original 500ms budget false-negatived on any cold connection).
+  `call_reflect` defaults to 5s (LLM-backed candidate extraction).
+  `call_propose` defaults to 1.5s (DB insert + dedupe scan).
 """
 
 from __future__ import annotations
@@ -28,7 +30,7 @@ import urllib.error
 import urllib.request
 from typing import Any
 
-_DEFAULT_BUDGET_S = 0.5
+_DEFAULT_BUDGET_S = 1.5
 _REFLECT_BUDGET_S = 5.0
 _PROPOSE_BUDGET_S = 1.5
 

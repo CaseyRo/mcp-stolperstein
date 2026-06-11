@@ -48,9 +48,38 @@ class TestStructuredSignals:
         assert self.signals.is_structured_error("exited with 127")
         assert self.signals.is_structured_error("command failed, exit code 1")
 
-    def test_http_status_matches(self):
-        assert self.signals.is_structured_error("HTTP 500 Internal Server Error")
-        assert self.signals.is_structured_error("GET /api/foo → 404")
+    @pytest.mark.parametrize("text", [
+        "HTTP 403",
+        "HTTP/1.1 500 Internal Server Error",
+        "http 404",
+        "status 502",
+        "status code 503",
+        "error 404",
+        "returned 500",
+        "404 Not Found",
+        "403 Forbidden",
+        "502 Bad Gateway",
+        "500 Internal Server Error",
+        "GET /api/foo → 404",
+    ])
+    def test_http_status_with_context_matches(self, text):
+        assert self.signals.is_structured_error(text)
+
+    @pytest.mark.parametrize("text", [
+        # The live false positive: a 545-byte file size in an ls listing.
+        ".rw-r--r-- 545 caseyromkes 11 Jun file.txt",
+        "took 433 ms",
+        "line 412: warning",
+        "545 /path/file.jsonl",
+        "processed 404 records",
+        "port 8443 closed",
+        # ASCII arrow + number is benign progress output, not a status line.
+        "downloading -> 450 KB/s",
+        "step 3 -> 500 items migrated",
+    ])
+    def test_bare_4xx5xx_number_does_not_match(self, text):
+        """A 400–599 number without status context is not an HTTP status."""
+        assert not self.signals.is_structured_error(text)
 
     def test_explicit_error_tag_matches(self):
         assert self.signals.is_structured_error("fatal: could not read config")
@@ -69,6 +98,68 @@ class TestStructuredSignals:
     def test_empty_and_none_are_safe(self):
         assert not self.signals.is_structured_error("")
         assert not self.signals.is_structured_error(None)  # type: ignore[arg-type]
+
+
+class TestDebugTrace:
+    """Opt-in trace file: valid JSONL when enabled, silent when not, bounded."""
+
+    def setup_method(self):
+        self.debug = _import("_debug")
+
+    def _isolate_tmpdir(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(self.debug.tempfile, "gettempdir", lambda: str(tmp_path))
+
+    def test_trace_writes_valid_json_line_when_enabled(self, tmp_path, monkeypatch):
+        self._isolate_tmpdir(tmp_path, monkeypatch)
+        monkeypatch.setenv("STOLPERSTEIN_HOOKS_DEBUG", "1")
+        self.debug.trace("PostToolUse", "inject", ku_id="ku_x")
+        lines = self.debug.trace_path().read_text().splitlines()
+        assert len(lines) == 1
+        record = json.loads(lines[0])
+        assert record["hook"] == "PostToolUse"
+        assert record["decision"] == "inject"
+        assert record["ku_id"] == "ku_x"
+        assert isinstance(record["ts"], float)
+
+    def test_trace_writes_nothing_when_disabled(self, tmp_path, monkeypatch):
+        self._isolate_tmpdir(tmp_path, monkeypatch)
+        monkeypatch.delenv("STOLPERSTEIN_HOOKS_DEBUG", raising=False)
+        self.debug.trace("PostToolUse", "inject")
+        assert not self.debug.trace_path().exists()
+
+    def test_rotation_when_file_exceeds_cap(self, tmp_path, monkeypatch):
+        self._isolate_tmpdir(tmp_path, monkeypatch)
+        monkeypatch.setenv("STOLPERSTEIN_HOOKS_DEBUG", "1")
+        monkeypatch.setattr(self.debug, "_MAX_BYTES", 64)
+        path = self.debug.trace_path()
+        path.write_text("x" * 100 + "\n")  # over the (patched) cap
+        self.debug.trace("Stop", "nudge")
+        rotated = path.with_name(path.name + ".1")
+        assert rotated.exists()
+        assert rotated.read_text().startswith("x")
+        # Fresh file holds exactly the new record.
+        lines = path.read_text().splitlines()
+        assert len(lines) == 1
+        assert json.loads(lines[0])["decision"] == "nudge"
+
+    def test_rotation_replaces_existing_backup(self, tmp_path, monkeypatch):
+        self._isolate_tmpdir(tmp_path, monkeypatch)
+        monkeypatch.setenv("STOLPERSTEIN_HOOKS_DEBUG", "1")
+        monkeypatch.setattr(self.debug, "_MAX_BYTES", 64)
+        path = self.debug.trace_path()
+        path.with_name(path.name + ".1").write_text("old backup\n")
+        path.write_text("y" * 100 + "\n")
+        self.debug.trace("Stop", "nudge")
+        assert path.with_name(path.name + ".1").read_text().startswith("y")
+
+    def test_no_rotation_below_cap(self, tmp_path, monkeypatch):
+        self._isolate_tmpdir(tmp_path, monkeypatch)
+        monkeypatch.setenv("STOLPERSTEIN_HOOKS_DEBUG", "1")
+        path = self.debug.trace_path()
+        self.debug.trace("Stop", "first")
+        self.debug.trace("Stop", "second")
+        assert not path.with_name(path.name + ".1").exists()
+        assert len(path.read_text().splitlines()) == 2
 
 
 class TestInjectionWrapper:

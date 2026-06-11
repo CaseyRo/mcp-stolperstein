@@ -4,29 +4,32 @@ Stolperstein conforms strictly to the upstream `mozilla-ai/cq` schema on the wir
 
 This document is the canonical registry. Every extension field carried in `rich` but dropped in `strict` **must** appear here.
 
-Upstream discussion proposing these extensions: [mozilla-ai/cq#286](https://github.com/mozilla-ai/cq/discussions/286).
+Upstream discussion proposing these extensions: [mozilla-ai/cq#286](https://github.com/mozilla-ai/cq/discussions/286). Maintainer response received 2026-04-28 — verdicts reflected in the Status column below.
+
+On the `additionalProperties: false` blocker: upstream's position is "probably, but not yet", with a stated preference for an explicit `extensions: object` slot over `x-` prefixed keys. They invited a scoping issue in advance of committing to a date. Until that lands, every field below stays strip-on-strict.
 
 ## Status legend
 
 - **proposed** — filed upstream, awaiting response.
 - **accepted** — upstream has merged the extension; we can unblock by re-vendoring the schema and moving the field out of this registry.
-- **declined** — upstream decided against; field stays local-only indefinitely.
+- **declined** — upstream decided against on the merits (reason noted per row); field stays local-only unless new evidence reopens it.
+- **deferred** — upstream acknowledges the underlying need but wants it resolved in a different shape or thread first.
 - **stolperstein-specific** — never intended for upstream (implementation detail or org-layer concern outside the protocol's scope).
 
 ## Extensions
 
 | Field | Location | Type | Status | Purpose |
 |---|---|---|---|---|
-| `evidence.severity` | evidence | `low \| medium \| high \| critical` | proposed | Ranking tiebreaker + decay-floor modifier. Safety-critical pitfalls stay visible longer and outrank cosmetic ones at equal confidence. |
-| `evidence.contributing_orgs` | evidence | `array[string]` (DIDs) | proposed | Diversity-weighted confidence: 3 orgs confirming > 3 agents from 1 org. |
-| `context.environment` | context | string | proposed | Build/runtime version scope (e.g. `xcode-16`, `node-22`) — version-specific pitfalls are common and orthogonal to language/framework/pattern. |
-| `kind` | top-level | `pitfall \| workaround \| tool-recommendation` | proposed | Coarse-grained KU typing so agents know the shape before reading. Upstream has nothing equivalent. |
+| `evidence.severity` | evidence | `low \| medium \| high \| critical` | declined | Ranking tiebreaker + decay-floor modifier. Upstream: contributor-self-assigned trust signals are cheap to game vs observed confirmations; importance should emerge from usage. |
+| `evidence.contributing_orgs` | evidence | `array[string]` (DIDs) | declined | Diversity-weighted confidence: 3 orgs confirming > 3 agents from 1 org. Upstream: per-KU org arrays are a profile-building vector when joined across units; diversity should be computed from confirmation provenance instead. |
+| `context.environment` | context | string | deferred | Build/runtime scope (`macos`, `cloudflare-workers`, `node-22`) — observed in practice as platform scope, not just version pins. Upstream: fold into `frameworks` + close the gap with SKILL.md guidance first; revisit via [#170](https://github.com/mozilla-ai/cq/issues/170) if it stays noisy. |
+| `kind` | top-level | `pitfall \| workaround \| tool-recommendation` | declined | Coarse-grained KU typing so agents know the shape before reading. Upstream: classification should be derived from observed usage, not contributor-declared; keeping that path open. |
 | `status` | top-level | `draft \| active \| stale \| disputed \| archived` | stolperstein-specific | Lifecycle state machine. Upstream models lifecycle only via `flags[]` — our richer model is internal. |
 | `staleness_policy` | top-level | string | stolperstein-specific | Per-KU decay policy override. |
 | `related[]` | top-level | `[{type, target_id}]` | stolperstein-specific | Relationship graph beyond `superseded_by`. |
 | `owner_org` | top-level | string (DID) | stolperstein-specific | Multi-tenant read filter via `TRUSTED_ORGS`. Phase 1 foundation — enforceable write permissions in Phase 2. Upstream has `tier: local \| private \| public` instead, which addresses a different slice. |
-| `provenance.proposer_did` | top-level `provenance` object | string (DID) | proposed as `created_by` semantics | Rich provenance. On the wire, strict mode emits `proposer_did` as upstream's `created_by`. |
-| `provenance.graduation_history` | top-level `provenance` object | `array[{timestamp, target, reviewer_did, agent}]` | proposed | Audit trail for tier graduations — EU AI Act relevance. |
+| `provenance.proposer_did` | top-level `provenance` object | string (DID) | deferred | Rich provenance. On the wire, strict mode emits `proposer_did` as upstream's `created_by`. Upstream sets `created_by` server-side; the cross-install attribution-portability question was invited as its own thread. |
+| `provenance.graduation_history` | top-level `provenance` object | `array[{timestamp, target, reviewer_did, agent}]` | declined | Audit trail for tier graduations. Upstream: governance state, not consumption state — belongs in admin tooling; a dedicated EU AI Act audit-trail thread was invited when we can name concrete compliance requirements. |
 | `provenance.emergent` | top-level `provenance` object | boolean | stolperstein-specific | Distinguishes emergent-aggregation-produced `tool-gap-signal` KUs from grandfathered migration artifacts. |
 
 ## Rules

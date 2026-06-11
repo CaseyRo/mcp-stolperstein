@@ -7,7 +7,7 @@
           {
             "type": "command",
             "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/handlers/on_prompt.py\"",
-            "timeout": 2
+            "timeout": 5
           }
         ]
       }
@@ -19,7 +19,7 @@
           {
             "type": "command",
             "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/handlers/on_bash.py\"",
-            "timeout": 2
+            "timeout": 5
           }
         ]
       }
@@ -30,7 +30,7 @@
           {
             "type": "command",
             "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/handlers/on_stop.py\"",
-            "timeout": 2
+            "timeout": 10
           }
         ]
       }

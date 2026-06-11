@@ -84,19 +84,33 @@ def _texts_from(resp: object) -> list[str]:
 
 
 def _extract_signal(event: dict) -> str | None:
-    """Given a Bash PostToolUse event payload, decide whether to fire and
-    return the text to query with (or None for no-op).
+    """Given a Bash PostToolUse/PostToolUseFailure event payload, decide
+    whether to fire and return the text to query with (or None for no-op).
     """
     if event.get("tool_name") != "Bash":
         return None
-    resp = event.get("tool_response") or {}
-    combined = "\n".join(_texts_from(resp)).strip()
+    if event.get("is_interrupt"):
+        # User cancellation, not an error worth recalling knowledge for.
+        return None
+
+    texts = _texts_from(event.get("tool_response") or {})
+
+    # PostToolUseFailure events carry NO tool_response at all — the failure
+    # text lives in a top-level `error` string ("Exit code N\n<stderr>").
+    # Observed live 2026-06-11; do not trust docs claiming otherwise.
+    err = event.get("error")
+    failed = isinstance(err, str) and bool(err.strip())
+    if failed:
+        texts.append(err.strip())
+
+    combined = "\n".join(texts).strip()
 
     exit_code = 0
+    resp = event.get("tool_response")
     if isinstance(resp, dict):
         exit_code = resp.get("exitCode", resp.get("exit_code", 0)) or 0
 
-    if exit_code == 0 and not is_structured_error(combined):
+    if not failed and exit_code == 0 and not is_structured_error(combined):
         return None
 
     return combined[-_STDERR_CHARS:] if combined else None
@@ -123,6 +137,7 @@ async def _run() -> int:
             hook_event,
             "no-error-signal",
             resp_shape=sorted(resp.keys()) if isinstance(resp, dict) else type(resp).__name__,
+            event_keys=sorted(event.keys()),
         )
         return 0
 

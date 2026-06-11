@@ -529,15 +529,45 @@ class TestEntryScriptsIntegration:
                 "count": 1,
             }
         monkeypatch.setattr(mod, "call_query", fake_call_query)
+        # Real PostToolUseFailure shape (captured live 2026-06-11): NO
+        # tool_response; failure text in a top-level `error` string.
         event = json.dumps({
             "hook_event_name": "PostToolUseFailure",
             "tool_name": "Bash",
-            "tool_response": {"exitCode": 1, "stderr": "Error: boom", "stdout": ""},
+            "tool_use_id": "toolu_x",
+            "error": "Exit code 1\nIndexError: list index out of range",
+            "is_interrupt": False,
+            "duration_ms": 71,
         })
         monkeypatch.setattr("sys.stdin", _StdinStub(event))
         assert await mod._run() == 0
         out = json.loads(capsys.readouterr().out)
         assert out["hookSpecificOutput"]["hookEventName"] == "PostToolUseFailure"
+
+    def test_extract_signal_failure_event_error_field(self):
+        """Top-level `error` string fires even with no structured-error match
+        — the event itself IS the failure signal."""
+        mod = _import("on_bash")
+        event = {
+            "tool_name": "Bash",
+            "hook_event_name": "PostToolUseFailure",
+            "error": "Exit code 1\nsome plain failure text without pattern",
+            "is_interrupt": False,
+        }
+        signal = mod._extract_signal(event)
+        assert signal is not None
+        assert "plain failure text" in signal
+
+    def test_extract_signal_interrupt_is_skipped(self):
+        """User-interrupted commands are not knowledge moments."""
+        mod = _import("on_bash")
+        event = {
+            "tool_name": "Bash",
+            "hook_event_name": "PostToolUseFailure",
+            "error": "Exit code 130\nKeyboardInterrupt",
+            "is_interrupt": True,
+        }
+        assert mod._extract_signal(event) is None
 
     def test_extract_signal_clean_content_blocks_noop(self):
         """Exit-code-absent content blocks with no error signal → no-op."""

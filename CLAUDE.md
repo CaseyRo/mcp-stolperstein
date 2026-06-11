@@ -85,7 +85,7 @@ def up(conn: sqlite3.Connection) -> None:
 
 ## Deployment
 
-Production runs via Komodo (`komodo.toml` → server `ubuntu-smurf-mirror`), exposed at `https://mcp-stolperstein.cdit-dev.de`. The container persists SQLite to the `stolperstein-data` volume and FastMCP's OAuth client cache to `fastmcp-data` (`FASTMCP_HOME=/data/fastmcp`).
+Production runs via Komodo on server `nebula-1` (stack `git-mcp-stolperstein-nebula`, auto-deploys from `main`), exposed at `https://mcp-stolperstein.cdit-dev.de` through the co-located `git-cloudflared` tunnel on the same host. The container persists SQLite to the `stolperstein-data` volume and FastMCP's OAuth client cache to `fastmcp-data` (`FASTMCP_HOME=/data/fastmcp`); both live on Hetzner volume `HC_Volume_105339184`. (Former host `ubuntu-smurf-mirror` is EOL and removed from Komodo.)
 
 **The private signing key (`/data/stolperstein.key`) is sensitive.** Exclude from volume backups and `docker cp`. Deploy-time checklist + rollback procedure in `README.md`.
 

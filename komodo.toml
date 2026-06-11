@@ -1,11 +1,11 @@
 [[stack]]
-name = "git-mcp-stolperstein"
+name = "git-mcp-stolperstein-nebula"
 description = "Stolperstein — Experiential knowledge capture MCP server"
 deploy = true
 tags = ["mcp"]
 
 [stack.config]
-server_id = "ubuntu-smurf-mirror"
+server_id = "nebula-1"
 git_provider = "github.com"
 repo = "CaseyRo/mcp-stolperstein"
 branch = "main"

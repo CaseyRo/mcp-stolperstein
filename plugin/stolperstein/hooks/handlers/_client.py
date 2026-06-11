@@ -48,6 +48,9 @@ def _do_http_post(url: str, body: bytes, auth_header: str, timeout: float) -> di
             "Content-Type": "application/json",
             "Accept": "application/json",
             "Authorization": auth_header,
+            # Cloudflare bot protection 403s the default Python-urllib/x.y
+            # User-Agent before the request ever reaches the server.
+            "User-Agent": "stolperstein-hook/1.0",
         },
     )
     with urllib.request.urlopen(req, timeout=timeout) as resp:

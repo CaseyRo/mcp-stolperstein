@@ -493,6 +493,61 @@ class TestEntryScriptsIntegration:
         assert "Note from Stolperstein" in out
         assert "Docker DNS trap" in out
 
+    @pytest.mark.parametrize("tool_response", [
+        # Content-blocks shape (observed for nonzero-exit Bash results)
+        {"content": [{"type": "text", "text": "Exit code 1\nFatalError: frobnication failed"}]},
+        # Bare-string shape
+        "Exit code 1\nFatalError: frobnication failed",
+        # Nested list-of-blocks without dict wrapper
+        {"content": [{"type": "text", "text": "FatalError: frobnication failed"}], "interrupted": False},
+    ])
+    def test_extract_signal_handles_alternate_response_shapes(self, tool_response):
+        """Failure payloads aren't always {stdout, stderr, exitCode} — the
+        extractor must find error text in content blocks and bare strings."""
+        mod = _import("on_bash")
+        event = {"tool_name": "Bash", "tool_response": tool_response}
+        signal = mod._extract_signal(event)
+        assert signal is not None
+        assert "FatalError" in signal
+
+    @pytest.mark.asyncio
+    async def test_failure_event_echoes_event_name(self, monkeypatch, capsys, tmp_path):
+        """PostToolUseFailure events must echo their own hookEventName —
+        the harness rejects output claiming the wrong event."""
+        monkeypatch.setenv("MCP_STOLPERSTEIN_PUBLIC_URL", "http://127.0.0.1:1")
+        monkeypatch.setenv("MCP_STOLPERSTEIN_API_KEY", "stmcp_test")
+        monkeypatch.setenv("FASTMCP_HOME", str(tmp_path))
+        mod = _import("on_bash")
+
+        async def fake_call_query(text, limit=1, confidence_min=0.5):
+            return {
+                "results": [{
+                    "id": "ku_" + "d" * 32,
+                    "insight": {"summary": "s", "action": "a"},
+                    "evidence": {"confidence": 0.8},
+                }],
+                "count": 1,
+            }
+        monkeypatch.setattr(mod, "call_query", fake_call_query)
+        event = json.dumps({
+            "hook_event_name": "PostToolUseFailure",
+            "tool_name": "Bash",
+            "tool_response": {"exitCode": 1, "stderr": "Error: boom", "stdout": ""},
+        })
+        monkeypatch.setattr("sys.stdin", _StdinStub(event))
+        assert await mod._run() == 0
+        out = json.loads(capsys.readouterr().out)
+        assert out["hookSpecificOutput"]["hookEventName"] == "PostToolUseFailure"
+
+    def test_extract_signal_clean_content_blocks_noop(self):
+        """Exit-code-absent content blocks with no error signal → no-op."""
+        mod = _import("on_bash")
+        event = {
+            "tool_name": "Bash",
+            "tool_response": {"content": [{"type": "text", "text": "all fine here"}]},
+        }
+        assert mod._extract_signal(event) is None
+
     def test_on_stop_short_session_no_nudge(self, monkeypatch, tmp_path, capsys):
         """Trivial exploratory sessions (below threshold) print nothing."""
         # Isolate the unreachable marker to this test (previous test runs

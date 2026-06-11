@@ -1,9 +1,17 @@
 #!/usr/bin/env python3
-"""PostToolUse hook (matcher=Bash) — queries the KB when a Bash tool call
-exits non-zero or stderr contains a structured error signal. Injects a
-sanitized, temporally-qualified hint for the agent's next turn.
+"""PostToolUse + PostToolUseFailure hook (matcher=Bash) — queries the KB
+when a Bash tool call fails or its output contains a structured error
+signal. Injects a sanitized, temporally-qualified hint for the agent's
+next turn.
 
-Fire-and-forget within the 500ms client budget. Never blocks the tool
+Registered for BOTH events because PostToolUse only fires on tool
+SUCCESS (exit 0) — nonzero-exit Bash calls, the exact moment this hook
+exists for, are delivered exclusively via PostToolUseFailure
+(anthropics/claude-code#6371). The success registration still matters:
+exit-0 commands whose output contains error text (grep over logs, test
+runners that swallow exit codes) are real signal too.
+
+Fire-and-forget within the client query budget. Never blocks the tool
 response.
 """
 
@@ -47,6 +55,34 @@ def _mark_unreachable(session_id: str) -> None:
         pass
 
 
+def _texts_from(resp: object) -> list[str]:
+    """Collect text from a tool_response of any shape.
+
+    Claude Code's Bash tool_response is not one stable shape: success
+    payloads carry `stdout`/`stderr` keys, failure payloads can be a bare
+    string or `{"content": [{"type": "text", "text": ...}]}` blocks.
+    Assuming the stdout/stderr shape made the hook silently skip exactly
+    the events it exists for (nonzero exits).
+    """
+    if isinstance(resp, str):
+        return [resp] if resp.strip() else []
+    if isinstance(resp, list):
+        out: list[str] = []
+        for item in resp:
+            out.extend(_texts_from(item))
+        return out
+    if isinstance(resp, dict):
+        out = []
+        for key in ("stderr", "stdout", "output", "error", "text"):
+            val = resp.get(key)
+            if isinstance(val, str) and val.strip():
+                out.append(val.strip())
+        if "content" in resp:
+            out.extend(_texts_from(resp["content"]))
+        return out
+    return []
+
+
 def _extract_signal(event: dict) -> str | None:
     """Given a Bash PostToolUse event payload, decide whether to fire and
     return the text to query with (or None for no-op).
@@ -54,15 +90,16 @@ def _extract_signal(event: dict) -> str | None:
     if event.get("tool_name") != "Bash":
         return None
     resp = event.get("tool_response") or {}
-    exit_code = resp.get("exitCode", resp.get("exit_code", 0))
-    stderr = (resp.get("stderr") or "").strip()
-    stdout = (resp.get("stdout") or "").strip()
+    combined = "\n".join(_texts_from(resp)).strip()
 
-    if exit_code == 0 and not is_structured_error(stderr) and not is_structured_error(stdout):
+    exit_code = 0
+    if isinstance(resp, dict):
+        exit_code = resp.get("exitCode", resp.get("exit_code", 0)) or 0
+
+    if exit_code == 0 and not is_structured_error(combined):
         return None
 
-    candidate = stderr or stdout
-    return candidate[-_STDERR_CHARS:] if candidate else None
+    return combined[-_STDERR_CHARS:] if combined else None
 
 
 async def _run() -> int:
@@ -74,40 +111,50 @@ async def _run() -> int:
     except json.JSONDecodeError:
         return 0
 
+    # PostToolUse or PostToolUseFailure — echo the real event name in the
+    # output so the harness accepts it; rate-limiting stays in one shared
+    # bucket (_HOOK_NAME) so the two registrations can't double-inject.
+    hook_event = event.get("hook_event_name") or _HOOK_NAME
+
     signal_text = _extract_signal(event)
     if not signal_text:
-        trace(_HOOK_NAME, "no-error-signal")
+        resp = event.get("tool_response")
+        trace(
+            hook_event,
+            "no-error-signal",
+            resp_shape=sorted(resp.keys()) if isinstance(resp, dict) else type(resp).__name__,
+        )
         return 0
 
     try:
         result = await call_query(signal_text, limit=1)
     except MCPUnreachable as e:
-        trace(_HOOK_NAME, "unreachable", error=str(e))
+        trace(hook_event, "unreachable", error=str(e))
         _mark_unreachable(_session_id(event))
         return 0
     if not result:
-        trace(_HOOK_NAME, "env-unset")
+        trace(hook_event, "env-unset")
         return 0
 
     results = result.get("results") or []
     if not results:
-        trace(_HOOK_NAME, "no-results")
+        trace(hook_event, "no-results")
         return 0
     top = results[0]
     confidence = (top.get("evidence") or {}).get("confidence", 0)
     if confidence < 0.5:
-        trace(_HOOK_NAME, "low-confidence", confidence=confidence)
+        trace(hook_event, "low-confidence", confidence=confidence)
         return 0
 
     if not should_inject(_HOOK_NAME, top.get("id", "")):
-        trace(_HOOK_NAME, "rate-limited", ku_id=top.get("id", ""))
+        trace(hook_event, "rate-limited", ku_id=top.get("id", ""))
         return 0
 
-    trace(_HOOK_NAME, "injected", ku_id=top.get("id", ""))
+    trace(hook_event, "injected", ku_id=top.get("id", ""))
 
     out = {
         "hookSpecificOutput": {
-            "hookEventName": _HOOK_NAME,
+            "hookEventName": hook_event,
             "additionalContext": wrap_injection(top, source="Bash error"),
         },
     }

@@ -15,3 +15,6 @@ build/
 # Private signing key — never committed.
 stolperstein.key
 *.bak-pre-v*
+
+# Agent working memory — never commit (leaks infra/creds)
+.claude/agent-memory/

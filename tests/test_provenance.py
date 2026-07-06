@@ -5,8 +5,6 @@ from __future__ import annotations
 import base64
 import sqlite3
 
-import pytest
-
 from stolperstein.provenance import (
     ENV_KEY,
     derive_did_from_pubkey,
@@ -14,7 +12,6 @@ from stolperstein.provenance import (
     get_or_create_install_did,
     load_signing_key,
     public_key_from_private,
-    record_graduation,
     write_signing_key_file,
 )
 
@@ -69,40 +66,3 @@ def test_get_or_create_install_did_is_single_install(tmp_path, monkeypatch):
     assert did1 == did2
     count = conn.execute("SELECT COUNT(*) FROM install_identity").fetchone()[0]
     assert count == 1
-
-
-def test_record_graduation_appends_agent_marker(tmp_path):
-    """graduation_history entries carry agent: true."""
-    db_path = str(tmp_path / "grad.db")
-    conn = sqlite3.connect(db_path)
-    conn.execute(
-        "CREATE TABLE knowledge_units (id TEXT PRIMARY KEY, graduation_history TEXT NOT NULL DEFAULT '[]')"
-    )
-    conn.execute(
-        "INSERT INTO knowledge_units (id, graduation_history) VALUES (?, '[]')",
-        ["ku_" + "a" * 32],
-    )
-    record_graduation(
-        "ku_" + "a" * 32, target="team", reviewer_did="did:key:zX", conn=conn, agent=True
-    )
-    import json
-    row = conn.execute(
-        "SELECT graduation_history FROM knowledge_units WHERE id = ?",
-        ["ku_" + "a" * 32],
-    ).fetchone()
-    history = json.loads(row[0])
-    assert len(history) == 1
-    assert history[0]["target"] == "team"
-    assert history[0]["reviewer_did"] == "did:key:zX"
-    assert history[0]["agent"] is True
-    assert "timestamp" in history[0]
-
-
-def test_record_graduation_raises_on_unknown_ku(tmp_path):
-    db_path = str(tmp_path / "grad.db")
-    conn = sqlite3.connect(db_path)
-    conn.execute(
-        "CREATE TABLE knowledge_units (id TEXT PRIMARY KEY, graduation_history TEXT NOT NULL DEFAULT '[]')"
-    )
-    with pytest.raises(ValueError, match="KU not found"):
-        record_graduation("ku_" + "0" * 32, target="team", reviewer_did="did:key:zX", conn=conn)

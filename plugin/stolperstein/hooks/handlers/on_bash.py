@@ -24,35 +24,12 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from _client import MCPUnreachable, call_query  # noqa: E402
+from _common import disabled, query_and_emit, session_id  # noqa: E402
 from _debug import trace  # noqa: E402
-from _inject import wrap_injection  # noqa: E402
-from _rate_limit import should_inject  # noqa: E402
 from _signals import is_structured_error  # noqa: E402
 
 _HOOK_NAME = "PostToolUse"
 _STDERR_CHARS = 4096
-
-
-def _disabled(hook_name: str) -> bool:
-    disabled = os.environ.get("STOLPERSTEIN_HOOKS_DISABLED", "").strip()
-    return hook_name in {n.strip() for n in disabled.split(",") if n.strip()}
-
-
-def _session_id(event: dict) -> str:
-    """Claude Code passes `session_id` in the hook event payload (there is
-    no CLAUDE_SESSION_ID env var); the env fallback keeps old tests working."""
-    return event.get("session_id") or os.environ.get("CLAUDE_SESSION_ID") or "default"
-
-
-def _mark_unreachable(session_id: str) -> None:
-    import tempfile
-    from pathlib import Path
-    marker = Path(tempfile.gettempdir()) / f"stolperstein-unreachable-{session_id}"
-    try:
-        marker.touch()
-    except OSError:
-        pass
 
 
 def _texts_from(resp: object) -> list[str]:
@@ -117,7 +94,7 @@ def _extract_signal(event: dict) -> str | None:
 
 
 async def _run() -> int:
-    if _disabled(_HOOK_NAME):
+    if disabled(_HOOK_NAME):
         return 0
 
     try:
@@ -141,40 +118,13 @@ async def _run() -> int:
         )
         return 0
 
-    try:
-        result = await call_query(signal_text, limit=1)
-    except MCPUnreachable as e:
-        trace(hook_event, "unreachable", error=str(e))
-        _mark_unreachable(_session_id(event))
-        return 0
-    if not result:
-        trace(hook_event, "env-unset")
-        return 0
-
-    results = result.get("results") or []
-    if not results:
-        trace(hook_event, "no-results")
-        return 0
-    top = results[0]
-    confidence = (top.get("evidence") or {}).get("confidence", 0)
-    if confidence < 0.5:
-        trace(hook_event, "low-confidence", confidence=confidence)
-        return 0
-
-    if not should_inject(_HOOK_NAME, top.get("id", "")):
-        trace(hook_event, "rate-limited", ku_id=top.get("id", ""))
-        return 0
-
-    trace(hook_event, "injected", ku_id=top.get("id", ""))
-
-    out = {
-        "hookSpecificOutput": {
-            "hookEventName": hook_event,
-            "additionalContext": wrap_injection(top, source="Bash error"),
-        },
-    }
-    print(json.dumps(out))
-    return 0
+    return await query_and_emit(
+        signal_text,
+        hook_event=hook_event,
+        rate_bucket=_HOOK_NAME,
+        source="Bash error",
+        sid=session_id(event),
+    )
 
 
 if __name__ == "__main__":

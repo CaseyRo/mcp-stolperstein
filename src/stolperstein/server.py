@@ -9,6 +9,7 @@ from pathlib import Path
 
 from fastmcp import Context, FastMCP
 from mcp.types import Icon, ToolAnnotations
+from starlette.responses import JSONResponse
 
 from stolperstein.auth import create_auth, create_bearer_only_auth
 from stolperstein.config import settings
@@ -139,7 +140,6 @@ async def health(_request):
     Intentionally does NOT reveal `proposer_did` or KU content — just
     shape health (can we reach SQLite + run migrations).
     """
-    from starlette.responses import JSONResponse
     try:
         from stolperstein import migrations as m
         from stolperstein.store import store
@@ -166,8 +166,6 @@ async def _hook_authorize(request):
     identically on the auth path.
     """
     import hmac
-
-    from starlette.responses import JSONResponse
 
     if settings.transport != "http":
         return None, JSONResponse({"error": "http transport required"}, status_code=503)
@@ -211,8 +209,6 @@ async def hook_query(request):
     Body: `{"text": "...", "limit": 1, "confidence_min": 0.5}`
     Response: `{"results": [...], "count": N}` (same as MCP tool)
     """
-    from starlette.responses import JSONResponse
-
     payload, err = await _hook_authorize(request)
     if err is not None:
         return err
@@ -244,8 +240,6 @@ async def hook_reflect(request):
     Body: `{"session_summary": "..."}`
     Response: ranked candidate-KU dict (same shape as MCP `reflect` tool)
     """
-    from starlette.responses import JSONResponse
-
     payload, err = await _hook_authorize(request)
     if err is not None:
         return err
@@ -263,60 +257,6 @@ async def hook_reflect(request):
         result = await reflect_with_dedup(session_summary, store=store)
     except Exception as e:
         logging.getLogger(__name__).exception("hook_reflect failed")
-        return JSONResponse(
-            {"error": "internal", "message": type(e).__name__}, status_code=500
-        )
-    return JSONResponse(result)
-
-
-@mcp.custom_route("/hook/propose", methods=["POST"])
-async def hook_propose(request):
-    """REST wrapper around `propose()` for zero-dep hook subprocesses.
-
-    Request: `POST /hook/propose`
-    Headers: `Authorization: Bearer <MCP_STOLPERSTEIN_API_KEY>`
-    Body: full propose() payload — `summary`, `detail`, `action`, `domains`,
-        `kind` required; `severity` + `context_*` optional.
-    Response: `{"ku": {...}, "duplicate_of": null, "message": null}` (same
-        shape as MCP `propose` tool).
-    """
-    from starlette.responses import JSONResponse
-
-    payload, err = await _hook_authorize(request)
-    if err is not None:
-        return err
-
-    required = ("summary", "detail", "action", "domains", "kind")
-    missing = [f for f in required if not payload.get(f)]
-    if missing:
-        return JSONResponse(
-            {"error": "validation", "message": f"missing required: {missing}"},
-            status_code=400,
-        )
-
-    domains = payload["domains"]
-    if not isinstance(domains, list) or not all(isinstance(d, str) for d in domains):
-        return JSONResponse(
-            {"error": "validation", "message": "domains must be a non-empty list of strings"},
-            status_code=400,
-        )
-
-    try:
-        from stolperstein.store import store
-        result = await store.propose(
-            summary=payload["summary"],
-            detail=payload["detail"],
-            action=payload["action"],
-            domains=domains,
-            kind=payload["kind"],
-            context_languages=payload.get("context_languages"),
-            context_frameworks=payload.get("context_frameworks"),
-            context_environment=payload.get("context_environment"),
-            context_pattern=payload.get("context_pattern"),
-            severity=payload.get("severity", "medium"),
-        )
-    except Exception as e:
-        logging.getLogger(__name__).exception("hook_propose failed")
         return JSONResponse(
             {"error": "internal", "message": type(e).__name__}, status_code=500
         )
@@ -655,15 +595,15 @@ def cq_extensions_resource() -> str:
     mime_type="application/json",
 )
 def cq_schema_resource() -> dict:
-    """The vendored strict CQ schema, or a note if it isn't bundled.
+    """The vendored strict CQ schema, or a note if it isn't bundled."""
+    import json
 
-    Lets agents and downstreams ground strict-wire payloads against the same
-    schema the inbound-sync validator uses.
-    """
+    schema_path = (
+        Path(__file__).parent.parent.parent
+        / "tests" / "fixtures" / "cq" / "knowledge_unit.json"
+    )
     try:
-        from stolperstein.sync.cq_team import _load_schema
-
-        return _load_schema()
+        return json.loads(schema_path.read_text())
     except Exception as e:  # schema file not packaged in this deployment
         return {
             "error": "schema_unavailable",
@@ -768,9 +708,8 @@ def recall_before_task_prompt(task: str = "", tech: str = "") -> str:
 
 def _cmd_migrate(args: argparse.Namespace) -> int:
     """Apply pending migrations to `CQ_LOCAL_DB_PATH` without starting the server."""
-    import sqlite3
-    import sqlite_vec
     from stolperstein import migrations
+    from stolperstein.store import connect
 
     db_path = args.db_path or settings.cq_local_db_path
 
@@ -785,19 +724,7 @@ def _cmd_migrate(args: argparse.Namespace) -> int:
             )
             return 2
 
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA foreign_keys=ON")
-    conn.enable_load_extension(True)
-    try:
-        sqlite_vec.load(conn)
-    except Exception:
-        # vec0 not required for migrations themselves, but the baseline schema
-        # would fail without it. Try to proceed; bubble up if it matters.
-        pass
-    conn.enable_load_extension(False)
-
+    conn = connect(db_path)
     from_version = migrations.current_version(conn)
     try:
         result = migrations.run(conn, db_path=db_path)

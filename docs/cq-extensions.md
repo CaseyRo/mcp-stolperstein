@@ -29,12 +29,14 @@ On the `additionalProperties: false` blocker: upstream's position is "probably, 
 | `related[]` | top-level | `[{type, target_id}]` | stolperstein-specific | Relationship graph beyond `superseded_by`. |
 | `owner_org` | top-level | string (DID) | stolperstein-specific | Multi-tenant read filter via `TRUSTED_ORGS`. Phase 1 foundation — enforceable write permissions in Phase 2. Upstream has `tier: local \| private \| public` instead, which addresses a different slice. |
 | `provenance.proposer_did` | top-level `provenance` object | string (DID) | deferred | Rich provenance. On the wire, strict mode emits `proposer_did` as upstream's `created_by`. Upstream sets `created_by` server-side; the cross-install attribution-portability question was invited as its own thread. |
-| `provenance.graduation_history` | top-level `provenance` object | `array[{timestamp, target, reviewer_did, agent}]` | declined | Audit trail for tier graduations. Upstream: governance state, not consumption state — belongs in admin tooling; a dedicated EU AI Act audit-trail thread was invited when we can name concrete compliance requirements. |
 | `provenance.emergent` | top-level `provenance` object | boolean | stolperstein-specific | Distinguishes emergent-aggregation-produced `tool-gap-signal` KUs from grandfathered migration artifacts. |
+
+## Removed from the live model
+
+- `provenance.graduation_history` (`array[{timestamp, target, reviewer_did, agent}]`, upstream verdict: **declined** — governance state belongs in admin tooling; EU AI Act audit-trail thread invited when we can name concrete requirements). Removed from the model in the 2026-07 dead-code cleanup: nothing wrote it (graduation is Phase-2 scope). The `graduation_history` DB column from m0004 remains; the field returns with Phase-2 graduation.
 
 ## Rules
 
 1. Adding a new extension requires adding a row here in the same change that adds the field.
 2. When upstream accepts an extension, move the row to the "accepted" table (not yet created — first acceptance will create it).
 3. Extensions must never leak through `to_cq_json_strict()`. `tests/test_cq_schema.py` validates this on every commit.
-4. Extensions do NOT need to appear in `to_cq_v0()` — v0 is a legacy-transition hatch, not an extension surface.

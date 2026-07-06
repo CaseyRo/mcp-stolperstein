@@ -6,9 +6,6 @@ Validates two serializer surfaces:
    `knowledge_unit.json` schema (no Stolperstein extensions).
 2. `to_cq_json_rich()` — carries extensions; does NOT validate against
    upstream strict, by design.
-
-Plus a round-trip: rich KU → strict wire → `from_cq_json_strict()` back
-into a (lossy on extensions) KU.
 """
 
 from __future__ import annotations
@@ -125,55 +122,3 @@ def test_strict_omits_stolperstein_extensions():
     # evidence.severity must not be there either
     assert "severity" not in data["evidence"]
     assert "environment" not in data.get("context", {})
-
-
-def test_flag_reason_dangerous_maps_to_incorrect_on_wire():
-    """dangerous (local) → incorrect (upstream wire)."""
-    from stolperstein.models import Flag, FlagReason
-    ku = _make_ku()
-    ku.flags = [Flag(reason=FlagReason.dangerous, detail="known production risk")]
-    data = ku.to_cq_json_strict()
-    assert data["flags"][0]["reason"] == "incorrect"
-
-
-def test_import_from_upstream_strict_payload():
-    """from_cq_json_strict() accepts upstream shape and fills extension defaults."""
-    external = {
-        "id": "ku_" + "c" * 32,
-        "version": 1,
-        "domains": ["docker", "networking"],
-        "insight": {
-            "summary": "Docker bridge networks don't resolve hostnames",
-            "detail": "Containers on the default bridge network cannot resolve each other.",
-            "action": "Use a user-defined bridge network for container-to-container communication.",
-        },
-        "context": {"languages": [], "frameworks": [], "pattern": "networking"},
-        "evidence": {
-            "confidence": 0.9,
-            "confirmations": 12,
-            "first_observed": "2026-03-01T00:00:00+00:00",
-            "last_confirmed": "2026-03-25T00:00:00+00:00",
-        },
-        "created_by": "did:key:zExternal",
-    }
-
-    ku = KnowledgeUnit.from_cq_json_strict(external, fallback_owner_org="did:key:zTrusted")
-    assert ku.id == external["id"]
-    assert ku.domains == ["docker", "networking"]
-    assert ku.evidence.confidence == 0.9
-    assert ku.provenance.proposer_did == "did:key:zExternal"
-    assert ku.owner_org == "did:key:zTrusted"
-    # Defaults filled
-    assert ku.kind == KUKind.pitfall
-    assert ku.status == KUStatus.active
-    assert ku.evidence.severity == KUSeverity.medium
-
-
-def test_v0_legacy_serializer_keeps_old_shape():
-    """to_cq_v0() keeps the pre-change shape for Siyuan transition."""
-    ku = _make_ku()
-    v0 = ku.to_cq_v0()
-    assert v0["domain"] == ["swift", "xcode"]  # singular (legacy)
-    assert v0["version"] == "1.0.0"  # string
-    assert "last_confirmed" in v0  # top-level, not inside evidence
-    assert "provenance" not in v0  # no extensions block

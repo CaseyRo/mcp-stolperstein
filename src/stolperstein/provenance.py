@@ -16,7 +16,6 @@ can be used by both the server and the migration runner.
 from __future__ import annotations
 
 import base64
-import json
 import logging
 import os
 import sqlite3
@@ -185,35 +184,3 @@ def get_or_create_install_did(
         [did, pub_pem, datetime.now(timezone.utc).isoformat()],
     )
     return did
-
-
-def record_graduation(
-    ku_id: str,
-    target: str,
-    reviewer_did: str,
-    conn: sqlite3.Connection,
-    agent: bool = True,
-) -> None:
-    """Append a graduation entry to a KU's graduation_history JSON column."""
-    row = conn.execute(
-        "SELECT graduation_history FROM knowledge_units WHERE id = ?",
-        [ku_id],
-    ).fetchone()
-    if row is None:
-        raise ValueError(f"KU not found: {ku_id}")
-
-    history_json = row["graduation_history"] if isinstance(row, sqlite3.Row) else row[0]
-    history = json.loads(history_json) if history_json else []
-
-    entry = {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "target": target,
-        "reviewer_did": reviewer_did,
-        "agent": agent,
-    }
-    history.append(entry)
-
-    conn.execute(
-        "UPDATE knowledge_units SET graduation_history = ? WHERE id = ?",
-        [json.dumps(history), ku_id],
-    )

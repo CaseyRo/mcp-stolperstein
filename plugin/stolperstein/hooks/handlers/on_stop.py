@@ -33,12 +33,12 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import sys
-import tempfile
-from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+from _common import disabled, mark_unreachable, session_id, unreachable_marker  # noqa: E402
 from _debug import trace  # noqa: E402
 
 _HOOK_NAME = "Stop"
@@ -46,11 +46,7 @@ _DEFAULT_THRESHOLD = 20
 _MAX_SUMMARY_TOOL_NAMES = 20
 _MAX_SUMMARY_ERROR_SNIPPETS = 5
 _MAX_ERROR_SNIPPET_LEN = 200
-
-
-def _disabled(hook_name: str) -> bool:
-    disabled = os.environ.get("STOLPERSTEIN_HOOKS_DISABLED", "").strip()
-    return hook_name in {n.strip() for n in disabled.split(",") if n.strip()}
+_NONZERO_EXIT_RE = re.compile(r"exit code [1-9]\d*")
 
 
 def _threshold() -> int:
@@ -69,16 +65,6 @@ def _reflect_via_hook_enabled() -> bool:
     """
     val = os.environ.get("STOLPERSTEIN_REFLECT_VIA_HOOK", "").strip().lower()
     return val in {"1", "true", "yes", "on"}
-
-
-def _session_id(event: dict) -> str:
-    """Claude Code passes `session_id` in the hook event payload (there is
-    no CLAUDE_SESSION_ID env var); the env fallback keeps old tests working."""
-    return event.get("session_id") or os.environ.get("CLAUDE_SESSION_ID") or "default"
-
-
-def _unreachable_marker(session_id: str) -> Path:
-    return Path(tempfile.gettempdir()) / f"stolperstein-unreachable-{session_id}"
 
 
 def _analyze_transcript(
@@ -132,9 +118,7 @@ def _analyze_transcript(
                 for block in content:
                     if isinstance(block, dict) and block.get("type") == "tool_result":
                         result_text = json.dumps(block).lower()
-                        if "exit" in result_text and any(
-                            f"exit code {i}" in result_text for i in range(1, 256)
-                        ):
+                        if _NONZERO_EXIT_RE.search(result_text):
                             substantive = True
                             if len(error_snippets) < _MAX_SUMMARY_ERROR_SNIPPETS:
                                 snippet = json.dumps(block)[:_MAX_ERROR_SNIPPET_LEN]
@@ -174,9 +158,9 @@ def _derive_session_summary(
     return "\n".join(lines)
 
 
-def _consume_unreachable_notice(session_id: str) -> str | None:
+def _consume_unreachable_notice(sid: str) -> str | None:
     """Return the unreachable notice (and clear the marker) if one is due."""
-    marker = _unreachable_marker(session_id)
+    marker = unreachable_marker(sid)
     if not marker.exists():
         return None
     try:
@@ -201,15 +185,7 @@ def _emit_system_message(*parts: str | None) -> None:
     print(json.dumps({"systemMessage": " ".join(messages)}))
 
 
-def _mark_unreachable(session_id: str) -> None:
-    """Write the unreachable marker so the next Stop hook reports it."""
-    try:
-        _unreachable_marker(session_id).touch(exist_ok=True)
-    except OSError:
-        pass
-
-
-async def _call_reflect_safely(summary: str, session_id: str) -> None:
+async def _call_reflect_safely(summary: str, sid: str) -> None:
     """Call /hook/reflect with all failures swallowed — fire-and-forget.
 
     The reflect endpoint's LLM-backed candidate extraction is best-effort
@@ -217,20 +193,15 @@ async def _call_reflect_safely(summary: str, session_id: str) -> None:
     marker for the next Stop hook to surface; nothing is printed now.
     """
     try:
-        from _client import MCPUnreachable, call_reflect
-    except Exception:
-        _mark_unreachable(session_id)
-        return
-    try:
+        from _client import call_reflect
+
         await call_reflect(summary)
-    except MCPUnreachable:
-        _mark_unreachable(session_id)
     except Exception:
-        _mark_unreachable(session_id)
+        mark_unreachable(sid)
 
 
 async def _run() -> int:
-    if _disabled(_HOOK_NAME):
+    if disabled(_HOOK_NAME):
         return 0
 
     try:
@@ -238,8 +209,8 @@ async def _run() -> int:
     except json.JSONDecodeError:
         event = {}
 
-    session_id = _session_id(event)
-    notice = _consume_unreachable_notice(session_id)
+    sid = session_id(event)
+    notice = _consume_unreachable_notice(sid)
 
     transcript_path = event.get("transcript_path") or event.get("transcriptPath")
     if not transcript_path or not os.path.exists(transcript_path):
@@ -254,7 +225,7 @@ async def _run() -> int:
 
     if _reflect_via_hook_enabled():
         summary = _derive_session_summary(tool_turns, tool_names, error_snippets)
-        await _call_reflect_safely(summary, session_id)
+        await _call_reflect_safely(summary, sid)
         trace(_HOOK_NAME, "reflect-via-hook", tool_turns=tool_turns)
         _emit_system_message(notice)
         return 0
@@ -273,7 +244,7 @@ def run() -> int:
     except Exception:
         # Never let a hook failure propagate up; worst case, mark the
         # session as having had an unreachable attempt and move on.
-        _mark_unreachable("default")
+        mark_unreachable("default")
         return 0
 
 

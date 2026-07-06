@@ -16,7 +16,6 @@ def test_default_settings(monkeypatch):
     assert s.port == 8716
     assert s.cq_embedding_model == "all-MiniLM-L6-v2"
     assert s.trusted_orgs == "*"
-    assert s.cq_siyuan_schema_version == 1
 
 
 def test_ensure_api_key_generates(monkeypatch):
@@ -62,29 +61,3 @@ def test_base_url_computed_from_host_port(monkeypatch):
 
     s = Settings()
     assert s.base_url == "http://0.0.0.0:8716"
-
-
-def test_siyuan_enabled(monkeypatch):
-    """siyuan_enabled reflects CQ_SIYUAN_URL."""
-    monkeypatch.setenv("CQ_SIYUAN_URL", "")
-    from stolperstein.config import Settings
-
-    s = Settings()
-    assert not s.siyuan_enabled
-
-    monkeypatch.setenv("CQ_SIYUAN_URL", "http://localhost:6806")
-    s2 = Settings()
-    assert s2.siyuan_enabled
-
-
-def test_team_sync_enabled(monkeypatch):
-    """team_sync_enabled reflects CQ_TEAM_ADDR."""
-    monkeypatch.setenv("CQ_TEAM_ADDR", "")
-    from stolperstein.config import Settings
-
-    s = Settings()
-    assert not s.team_sync_enabled
-
-    monkeypatch.setenv("CQ_TEAM_ADDR", "http://localhost:8742")
-    s2 = Settings()
-    assert s2.team_sync_enabled

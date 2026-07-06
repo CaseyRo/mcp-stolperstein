@@ -24,7 +24,6 @@ from stolperstein.config import settings
 from stolperstein.models import (
     Context,
     Evidence,
-    GraduationEntry,
     Insight,
     KnowledgeUnit,
     KUCreate,
@@ -41,7 +40,6 @@ from stolperstein.provenance import get_or_create_install_did
 logger = logging.getLogger(__name__)
 
 EMBEDDING_DIM = 384  # all-MiniLM-L6-v2
-_KU_ID_STRICT = re.compile(r"^ku_[0-9a-f]{32}$")
 
 
 def _serialize_f32(vector: list[float]) -> bytes:
@@ -59,6 +57,22 @@ def _parse_staleness_days(policy: str) -> int:
         return 90
 
 
+def connect(db_path: str) -> sqlite3.Connection:
+    """Open a configured connection (Row factory, WAL, FKs, sqlite-vec loaded).
+
+    Shared by the store and the `migrate` CLI so both speak to the same
+    SQLite feature set.
+    """
+    db = sqlite3.connect(db_path)
+    db.row_factory = sqlite3.Row
+    db.execute("PRAGMA journal_mode=WAL")
+    db.execute("PRAGMA foreign_keys=ON")
+    db.enable_load_extension(True)
+    sqlite_vec.load(db)
+    db.enable_load_extension(False)
+    return db
+
+
 class KnowledgeStore:
     """SQLite-backed knowledge unit store."""
 
@@ -70,13 +84,7 @@ class KnowledgeStore:
 
     def _get_db(self) -> sqlite3.Connection:
         if self._db is None:
-            self._db = sqlite3.connect(self._db_path)
-            self._db.row_factory = sqlite3.Row
-            self._db.execute("PRAGMA journal_mode=WAL")
-            self._db.execute("PRAGMA foreign_keys=ON")
-            self._db.enable_load_extension(True)
-            sqlite_vec.load(self._db)
-            self._db.enable_load_extension(False)
+            self._db = connect(self._db_path)
             self._init_baseline()
             migrations.run(self._db, db_path=self._db_path)
             self._install_did = self._read_install_did()
@@ -171,20 +179,9 @@ class KnowledgeStore:
             contributing_orgs=json.loads(row["contributing_orgs"] or "[]"),
             severity=KUSeverity(row["evidence_severity"]),
         )
-        grad_raw = json.loads(row["graduation_history"] or "[]")
-        grad_history = [
-            GraduationEntry(
-                timestamp=_parse_dt(g["timestamp"]),
-                target=g["target"],
-                reviewer_did=g["reviewer_did"],
-                agent=g.get("agent", True),
-            )
-            for g in grad_raw
-        ]
         emergent = row["provenance_emergent"]
         prov = Provenance(
             proposer_did=row["proposer_did"],
-            graduation_history=grad_history,
             emergent=(bool(emergent) if emergent is not None else None),
         )
         return KnowledgeUnit(
@@ -201,7 +198,6 @@ class KnowledgeStore:
             kind=KUKind(row["kind"]),
             status=KUStatus(row["status"]),
             superseded_by=row["superseded_by"],
-            flags=[],  # flags are not stored in this schema yet — future enhancement
             provenance=prov,
             owner_org=row["owner_org"],
             staleness_policy=row["staleness_policy"],
@@ -265,10 +261,6 @@ class KnowledgeStore:
             raise ToolError(
                 f"Invalid severity '{severity}'. Must be one of: low, medium, high, critical."
             )
-
-        # Validate domains
-        if not domains or not isinstance(domains, list):
-            raise ToolError("domains must be a non-empty list of strings")
 
         # Build the input model (validates summary length, etc.)
         try:
@@ -737,9 +729,12 @@ class KnowledgeStore:
         ).model_dump()
 
         if debug:
-            result["schema_version"] = migrations.current_version(db)
+            version = migrations.current_version(db)
+            result["schema_version"] = version
             result["proposer_did"] = self.install_did
-            result["applied_migrations"] = [m.id for m in migrations.registered()]
+            result["applied_migrations"] = [
+                m.id for m in migrations.registered() if m.version <= version
+            ]
 
             org_rows = db.execute(
                 "SELECT owner_org, COUNT(*) as cnt FROM knowledge_units "

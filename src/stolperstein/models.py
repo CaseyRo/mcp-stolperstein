@@ -2,15 +2,13 @@
 
 Stolperstein carries a richer model than upstream `mozilla-ai/cq` currently
 defines. The internal model is the superset. Serialization to the wire goes
-through one of three explicit functions:
+through one of two explicit functions:
 
 - `to_cq_json_strict()` emits only fields present in upstream's schema
   (see `tests/fixtures/cq/knowledge_unit.json`). Passes strict validation.
 - `to_cq_json_rich()` emits the full superset including Stolperstein
   extensions. Intended for local consumers, debugging, and any downstream
   aware of our extensions.
-- `to_cq_v0()` emits the pre-change legacy shape for the Siyuan sync
-  transition period.
 
 See `docs/cq-extensions.md` for the registry of every field that exists in
 `rich` but not in `strict`.
@@ -45,23 +43,6 @@ class KUSeverity(str, Enum):
     medium = "medium"
     high = "high"
     critical = "critical"
-
-
-class FlagReason(str, Enum):
-    """Stolperstein internal flag reasons. Maps to upstream on the wire:
-
-    - `stale` → upstream `stale`
-    - `incorrect` → upstream `incorrect`
-    - `dangerous` → upstream `incorrect` (with local `x_severity=dangerous` hint)
-    - `duplicate` → upstream `duplicate`
-
-    `superseded` is NEVER a flag — it is expressed via top-level `superseded_by`.
-    """
-
-    stale = "stale"
-    incorrect = "incorrect"
-    dangerous = "dangerous"
-    duplicate = "duplicate"
 
 
 class KURelation(BaseModel):
@@ -107,37 +88,15 @@ class Evidence(BaseModel):
     severity: KUSeverity = KUSeverity.medium  # extension
 
 
-class GraduationEntry(BaseModel):
-    """Single entry in the graduation_history audit trail."""
-
-    timestamp: datetime
-    target: str  # e.g. "local", "team", "global"
-    reviewer_did: str
-    agent: bool = True
-
-
 class Provenance(BaseModel):
     """Rich provenance.
 
     `proposer_did` maps to upstream's `created_by` on the wire.
-    `graduation_history` and `emergent` are Stolperstein extensions.
+    `emergent` is a Stolperstein extension.
     """
 
     proposer_did: str
-    graduation_history: list[GraduationEntry] = Field(default_factory=list)  # extension
     emergent: bool | None = None  # extension — None for pre-v1 grandfathered rows
-
-
-class Flag(BaseModel):
-    """Flag against a KU. Upstream allows these reasons on the wire:
-    stale | incorrect | duplicate. `dangerous` is our extension; it maps to
-    `incorrect` on strict output with a locally-retained hint.
-    """
-
-    reason: FlagReason
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    detail: str | None = None  # server-side only
-    duplicate_of: str | None = None  # required if reason == duplicate (upstream)
 
 
 class KnowledgeUnit(BaseModel):
@@ -156,7 +115,6 @@ class KnowledgeUnit(BaseModel):
     kind: KUKind  # extension
     status: KUStatus = KUStatus.draft  # extension
     superseded_by: str | None = None  # top-level in upstream
-    flags: list[Flag] = Field(default_factory=list)
     provenance: Provenance  # proposer_did required
     owner_org: str  # extension; defaults to proposer_did at propose time
     staleness_policy: str = "confirm_or_decay_after_90d"  # extension
@@ -203,100 +161,11 @@ class KnowledgeUnit(BaseModel):
         if self.superseded_by is not None:
             out["superseded_by"] = self.superseded_by
 
-        # Map our flag reasons to upstream's (stale | incorrect | duplicate);
-        # `dangerous` collapses to `incorrect`.
-        strict_flags: list[dict[str, Any]] = []
-        for f in self.flags:
-            if f.reason == FlagReason.dangerous:
-                reason_wire = "incorrect"
-            else:
-                reason_wire = f.reason.value
-            entry: dict[str, Any] = {"reason": reason_wire}
-            entry["timestamp"] = _iso(f.timestamp)
-            if f.detail is not None:
-                entry["detail"] = f.detail
-            if f.reason == FlagReason.duplicate and f.duplicate_of is not None:
-                entry["duplicate_of"] = f.duplicate_of
-            strict_flags.append(entry)
-        if strict_flags:
-            out["flags"] = strict_flags
-
         return out
 
     def to_cq_json_rich(self) -> dict[str, Any]:
         """Emit the full internal superset. Extensions present."""
         return self.model_dump(mode="json")
-
-    @classmethod
-    def from_cq_json_strict(cls, data: dict[str, Any], fallback_owner_org: str = "did:key:zUnknown") -> KnowledgeUnit:
-        """Construct a KU from an upstream-strict CQ JSON payload.
-
-        Extensions absent in upstream are filled with defaults:
-        - `kind` defaults to `pitfall` (upstream has no kind — we must pick one).
-        - `status` defaults to `active` (inbound from another tier is already live).
-        - `severity` defaults to `medium`.
-        - `owner_org` defaults to the provided fallback (typically the upstream tier DID).
-        - `provenance.proposer_did` is taken from `created_by` (upstream field name).
-        """
-        insight = Insight(**data["insight"])
-        ctx = data.get("context", {}) or {}
-        context = Context(
-            languages=list(ctx.get("languages", []) or []),
-            frameworks=list(ctx.get("frameworks", []) or []),
-            pattern=ctx.get("pattern"),
-        )
-        ev = data.get("evidence", {}) or {}
-        evidence = Evidence(
-            confidence=float(ev.get("confidence", 0.5)),
-            confirmations=int(ev.get("confirmations", 0)),
-            first_observed=datetime.fromisoformat(ev["first_observed"])
-                if ev.get("first_observed") else datetime.now(timezone.utc),
-            last_confirmed=datetime.fromisoformat(ev["last_confirmed"])
-                if ev.get("last_confirmed") else datetime.now(timezone.utc),
-        )
-        created_by = data.get("created_by", fallback_owner_org)
-        prov = Provenance(proposer_did=created_by)
-        return cls(
-            id=data["id"],
-            version=int(data.get("version", 1)),
-            domains=list(data["domains"]),
-            insight=insight,
-            context=context,
-            evidence=evidence,
-            kind=KUKind.pitfall,  # no upstream kind — default
-            status=KUStatus.active,  # default for imports
-            superseded_by=data.get("superseded_by"),
-            flags=[],
-            provenance=prov,
-            owner_org=fallback_owner_org,
-        )
-
-    def to_cq_v0(self) -> dict[str, Any]:
-        """Emit the pre-change legacy shape (singular `domain`, top-level
-        `last_confirmed`, no provenance/extensions block, no context block).
-        For Siyuan sync transition only.
-        """
-        return {
-            "id": self.id,
-            "version": "1.0.0",
-            "domain": list(self.domains),
-            "insight": {
-                "summary": self.insight.summary,
-                "detail": self.insight.detail,
-                "action": self.insight.action,
-            },
-            "confidence": self.evidence.confidence,
-            "confirmations": self.evidence.confirmations,
-            "contributing_orgs": list(self.evidence.contributing_orgs),
-            "first_observed": _iso(self.evidence.first_observed),
-            "last_confirmed": _iso(self.evidence.last_confirmed),
-            "last_queried_at": _iso(self.last_queried_at) if self.last_queried_at else None,
-            "kind": self.kind.value,
-            "status": self.status.value,
-            "staleness_policy": self.staleness_policy,
-            "related": [r.model_dump() for r in self.related],
-            "graduated_to_team": self.graduated_to_team,
-        }
 
 
 def _iso(dt: datetime | None) -> str | None:
@@ -343,18 +212,16 @@ class StoreStatus(BaseModel):
     tool_gap_signals: dict[str, int]  # {grandfathered, emergent}
 
 
-class StoreStatusDebug(StoreStatus):
-    """Extended status for operators."""
+class _DropNoneModel(BaseModel):
+    """Mixin: omit None fields on serialization."""
 
-    schema_version: int
-    proposer_did: str
-    applied_migrations: list[str]
-    by_owner_org: dict[str, int]
-    recent_emergent: list[str]  # KU ids
-    query_misses_window: int
+    @model_serializer(mode="wrap")
+    def _drop_none(self, handler):  # type: ignore[no-untyped-def]
+        data = handler(self)
+        return {k: v for k, v in data.items() if v is not None}
 
 
-class StatusReport(StoreStatus):
+class StatusReport(StoreStatus, _DropNoneModel):
     """Tool-facing status return.
 
     Superset of `StoreStatus`: the token-frugal fields are always present;
@@ -371,11 +238,6 @@ class StatusReport(StoreStatus):
     recent_emergent: list[str] | None = None  # KU ids
     query_misses_window: int | None = None
 
-    @model_serializer(mode="wrap")
-    def _drop_none_debug(self, handler):  # type: ignore[no-untyped-def]
-        data = handler(self)
-        return {k: v for k, v in data.items() if v is not None}
-
 
 class QueryResult(BaseModel):
     """Typed result of `query()` — ranked KUs plus a count.
@@ -389,7 +251,7 @@ class QueryResult(BaseModel):
     count: int = 0
 
 
-class ReflectResult(BaseModel):
+class ReflectResult(_DropNoneModel):
     """Typed result of `reflect()` — ranked candidate KUs plus metadata.
 
     Each candidate is a `ReflectCandidate` (flat `context_*` + `severity`)
@@ -399,11 +261,6 @@ class ReflectResult(BaseModel):
     candidates: list[ReflectCandidate] = Field(default_factory=list)
     method: str | None = None  # "llm" | "heuristic"; absent when no candidates
     message: str | None = None
-
-    @model_serializer(mode="wrap")
-    def _drop_none(self, handler):  # type: ignore[no-untyped-def]
-        data = handler(self)
-        return {k: v for k, v in data.items() if v is not None}
 
 
 class ReflectCandidate(BaseModel):

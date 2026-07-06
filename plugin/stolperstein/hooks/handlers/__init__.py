@@ -19,7 +19,10 @@ Three hooks are registered (see `../hooks.json`):
 
 All handlers share:
 
-- `_client.py` — HTTP MCP client with 500ms budget + bearer token sanitization.
+- `_common.py` — env gating, session id, unreachable marker, and the
+  query → confidence-gate → rate-limit → inject pipeline.
+- `_client.py` — stdlib HTTP client with per-call budget + bearer token
+  sanitization.
 - `_rate_limit.py` — fcntl.flock-guarded state file; 30s cooldown per hook
   type; 5min per-KU dedupe; schema-validated on read.
 - `_inject.py` — fixed-template wrapper + sanitization (strips `<[^>]+>`)

@@ -11,8 +11,8 @@ COPY src/ ./src/
 # the extra-index-url is required for pip to find the +cpu build; it saves
 # ~5 GB of nvidia-cuda-* packages nebula-1 (CPU-only VM) can't use.
 RUN pip install --no-cache-dir uv && \
-    uv export --frozen --no-dev --no-emit-project --no-hashes -o /tmp/requirements.txt && \
-    pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cpu \
+    uv export --frozen --no-dev --no-emit-project -o /tmp/requirements.txt && \
+    pip install --no-cache-dir --require-hashes --extra-index-url https://download.pytorch.org/whl/cpu \
         -r /tmp/requirements.txt && \
     pip install --no-cache-dir --no-deps .
 

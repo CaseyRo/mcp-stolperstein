@@ -1,6 +1,6 @@
 # cq-interop — delta: adopt the upstream `extensions` slot
 
-## MODIFIED Requirements
+## ADDED Requirements
 
 ### Requirement: KU wire format conforms strictly to upstream CQ schema
 

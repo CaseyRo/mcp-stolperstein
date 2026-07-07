@@ -59,6 +59,16 @@ _DEFAULT_PATTERNS: list[re.Pattern[str]] = [
     # Explicit error-tag prefixes at line start or on their own token.
     re.compile(r"(?:^|\n|\s)(?:fatal|panic|ERROR|FAILED):", re.M),
     re.compile(r"^Error:\s", re.M),
+    # Build/test failure summaries that carry no exception name. These are
+    # the shapes that reach the SUCCESS hook path when the exit code is
+    # masked by a pipe (`pytest ... | tail`) or a tool that swallows it:
+    # pytest counts + per-test lines, eslint counts, npm, tsc, rustc,
+    # gradle/xcodebuild.
+    re.compile(r"\b[1-9]\d* (?:failed|errors)\b"),
+    re.compile(r"^(?:FAILED|ERROR) \S", re.M),
+    re.compile(r"npm ERR!"),
+    re.compile(r"\berror(?: TS\d+|\[E\d{4}\])"),
+    re.compile(r"\b(?:BUILD|Build|Compilation) (?:FAILED|failed)\b"),
 ]
 
 

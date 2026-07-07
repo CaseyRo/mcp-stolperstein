@@ -81,6 +81,28 @@ class TestStructuredSignals:
         """A 400–599 number without status context is not an HTTP status."""
         assert not self.signals.is_structured_error(text)
 
+    @pytest.mark.parametrize("text", [
+        "4 failed, 100 passed in 2.31s",
+        "FAILED tests/test_store.py::test_query - assert 1 == 2",
+        "npm ERR! code ELIFECYCLE",
+        "src/app.ts(12,5): error TS2345: Argument of type 'x'",
+        "error[E0308]: mismatched types",
+        "BUILD FAILED in 4s",
+        "\u2716 14 problems (2 errors, 12 warnings)",
+    ])
+    def test_build_failure_summaries_match(self, text):
+        """Exit-code-masked build/test failures (pytest | tail) must fire."""
+        assert self.signals.is_structured_error(text)
+
+    @pytest.mark.parametrize("text", [
+        "0 failed, 104 passed in 2.31s",
+        "all 12 checks passed",
+        "we failed to reach agreement on the naming",
+        "the build finished without errors",
+    ])
+    def test_healthy_and_prose_summaries_do_not_match(self, text):
+        assert not self.signals.is_structured_error(text)
+
     def test_explicit_error_tag_matches(self):
         assert self.signals.is_structured_error("fatal: could not read config")
         assert self.signals.is_structured_error("panic: runtime error")

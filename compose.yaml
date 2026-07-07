@@ -18,16 +18,19 @@ services:
       - CQ_LOCAL_DB_PATH=/data/stolperstein.db
       - MCP_STOLPERSTEIN_API_KEY=${MCP_STOLPERSTEIN_API_KEY:-}
       - MCP_STOLPERSTEIN_PUBLIC_URL=${MCP_STOLPERSTEIN_PUBLIC_URL:-https://mcp-stolperstein.cdit-dev.de}
+      # Recovery path: if /data/stolperstein.key is ever lost, set this (base64
+      # of the 32-byte key) in Komodo env and it wins over the file. Defaults
+      # empty -> normal boot loads the key from the volume.
+      - MCP_STOLPERSTEIN_SIGNING_KEY=${MCP_STOLPERSTEIN_SIGNING_KEY:-}
       - CF_ACCESS_TEAM=${CF_ACCESS_TEAM:-cdit-dev}
       - CF_ACCESS_CLIENT_ID=${CF_ACCESS_CLIENT_ID}
       - CF_ACCESS_CLIENT_SECRET=${CF_ACCESS_CLIENT_SECRET}
       - CQ_EMBEDDING_MODEL=${CQ_EMBEDDING_MODEL:-all-MiniLM-L6-v2}
       - CQ_EMBEDDING_API_URL=${CQ_EMBEDDING_API_URL:-}
-      - CQ_TEAM_ADDR=${CQ_TEAM_ADDR:-}
-      - CQ_TEAM_API_KEY=${CQ_TEAM_API_KEY:-}
-      - CQ_SIYUAN_URL=${CQ_SIYUAN_URL:-}
-      - CQ_SIYUAN_NOTEBOOK=${CQ_SIYUAN_NOTEBOOK:-}
-      - CQ_SIYUAN_TOKEN=${CQ_SIYUAN_TOKEN:-}
+      # CQ_TEAM_* and CQ_SIYUAN_* removed: nothing in the codebase reads them
+      # (no sync/ module, not defined in Settings), so passing them only injected
+      # live tokens into the container for no consumer. Re-add alongside the code
+      # when team / SiYuan sync is actually implemented.
       - CQ_LLM_API_URL=${CQ_LLM_API_URL:-}
       - CQ_LLM_API_KEY=${CQ_LLM_API_KEY:-}
       - CQ_LLM_MODEL=${CQ_LLM_MODEL:-gpt-4o-mini}

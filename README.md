@@ -38,15 +38,20 @@ uv run mcp-stolperstein detect-emergent   # run emergent-signal aggregation manu
 
 ### Rollback
 
-Stop the container, copy `stolperstein.db.bak-pre-v<N>` over `stolperstein.db`, redeploy the previous image tag. If `/data/stolperstein.key` was lost, the install will generate a new keypair on next boot (KUs remain intact but subsequent proposals get a new DID — the audit chain breaks at the rollback point, which is recoverable but visible).
+There are no image tags — the stack builds from source on `nebula-1` (`build: .`, no registry), so rollback is git- and volume-based:
+
+- **Code rollback**: `git revert <bad-sha>` and open a PR (`main` is branch-protected; CI must pass), or pin the Komodo stack to the last-good commit SHA for an immediate targeted redeploy. Budget ~5 min for the rebuild (it re-installs the CPU torch wheel and re-downloads the embedding model).
+- **DB rollback** (a breaking migration went wrong): stop the container, copy `stolperstein.db.bak-pre-v<N>` over `stolperstein.db`, then deploy the code SHA that matches that schema. Migrations run on boot, so *old code on a newer-migrated DB* is exactly what the `.bak` guards against — and `.bak-pre-v<N>` only exists for breaking migrations.
+- If `/data/stolperstein.key` was lost, the install generates a new keypair on next boot (KUs remain intact, but subsequent proposals get a new DID — the provenance chain breaks at the rollback point, recoverable but visible). Escrow the key (see below) to avoid this.
 
 ## Private signing key (`/data/stolperstein.key`)
 
 The install's Ed25519 private key is stored **outside** the SQLite DB for good reason — a DB leak does not compromise signing capability. Treat `/data/stolperstein.key` as sensitive:
 
-- Exclude it from volume backups (`stolperstein-data-pre-v*` snapshots are the DB only; don't bundle the key file in).
+- **A whole-volume snapshot of `stolperstein-data` includes the key** — you can't exclude one file from a block/volume snapshot, so snapshot access = signing access; scope who can read those snapshots accordingly. For DB-only backups, copy `stolperstein.db` + `*.bak-pre-v*` at the file level instead.
+- **Escrow it.** There is otherwise exactly one copy — a volume loss permanently rotates the install DID. Base64 the key into a 1Password item so it's recoverable: `docker exec <container> base64 -w0 /data/stolperstein.key` → store as a 1Password field, then recover by setting `MCP_STOLPERSTEIN_SIGNING_KEY` in Komodo env.
 - Don't include it in `docker cp` / dump operations.
-- To inject the key via env (for CI or ephemeral deployments), set `MCP_STOLPERSTEIN_SIGNING_KEY` to the base64-encoded 32-byte key. The env var takes priority over the file.
+- To inject the key via env (recovery, CI, or ephemeral deployments), set `MCP_STOLPERSTEIN_SIGNING_KEY` to the base64-encoded 32-byte key. The env var takes priority over the file.
 
 ## Claude Code plugin
 

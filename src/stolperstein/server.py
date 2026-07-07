@@ -817,7 +817,14 @@ def main() -> None:
     store._get_db()
 
     if settings.transport == "http":
-        mcp.run(transport="http", host=settings.host, port=settings.port)
+        mcp.run(
+            transport="http",
+            host=settings.host,
+            port=settings.port,
+            allowed_hosts=[
+                h.strip() for h in settings.allowed_hosts.split(",") if h.strip()
+            ],
+        )
     else:
         mcp.run()
 

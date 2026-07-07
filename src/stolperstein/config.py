@@ -19,6 +19,13 @@ class Settings(BaseSettings):
     transport: Literal["stdio", "http"] = "stdio"
     host: str = "127.0.0.1"
     port: int = 8716
+    # Host-header allowlist for fastmcp >= 3.4.3's DNS-rebind guard.
+    # Comma-separated fnmatch patterns; "*" = accept any Host. Wildcard is
+    # the right default HERE because this server is reached under several
+    # legitimate Host values (public hostname via cloudflared, Tailscale
+    # IP:port from uptime monitors, localhost from the Docker healthcheck)
+    # and its actual gate is bearer auth, not Host trust.
+    allowed_hosts: str = "*"
 
     # MCP server auth
     mcp_stolperstein_api_key: SecretStr = SecretStr("")

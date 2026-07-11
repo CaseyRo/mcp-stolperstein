@@ -18,6 +18,16 @@ Stolperfalle is the local node — one per install — where Knowledge Units (KU
 
 On the wire, it conforms to the upstream cq schema strictly. Locally it carries a richer superset (severity, status state machine, kind enum, rich provenance, multi-tenant `owner_org`). See [`docs/cq-extensions.md`](docs/cq-extensions.md) for the extension registry. Upstream discussion of proposed additions: [mozilla-ai/cq#286](https://github.com/mozilla-ai/cq/discussions/286).
 
+## Relationship with upstream (mozilla-ai/cq)
+
+Stolperfalle is not a fork — it's an independent, cq-compatible local node that stays strictly valid on the wire and proposes anything it needs beyond that back upstream rather than diverging quietly.
+
+**History so far:** filed [discussion #286](https://github.com/mozilla-ai/cq/discussions/286) proposing a set of local extensions (severity, kind, status, org ownership, etc.) → scoped as [issue #406](https://github.com/mozilla-ai/cq/issues/406), proposing a generic `extensions` slot instead of relaxing `additionalProperties` → **merged upstream as [PR #453](https://github.com/mozilla-ai/cq/pull/453) on 2026-06-23**. That slot is now how Stolperfalle carries its own fields (`stolperstein:*` namespaced keys — the wire namespace predates and is decoupled from the product rename; see [`docs/cq-extensions.md`](docs/cq-extensions.md)) without ever breaking strict conformance.
+
+**Current standing on individual fields:** `severity`, `contributing_orgs`, and `kind` were declined for core promotion (upstream's call: importance should emerge from usage, not self-declaration) — they stay local-only, riding the slot. `context.environment` and `proposer_did` attribution are deferred, open threads. `status`, `staleness_policy`, `related[]`, `owner_org`, and `emergent` were never proposed for core — they're Stolperfalle-specific by design.
+
+**Open loop:** an adopter comment for #286, announcing production slot emission, is drafted (`openspec/changes/archive/2026-07-07-adopt-cq-extensions-slot/upstream-comment-draft.md`) but not yet posted — held for review.
+
 ## Migration workflow
 
 The server runs pending migrations automatically on boot. For operators:

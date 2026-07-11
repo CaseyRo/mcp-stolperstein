@@ -21,10 +21,12 @@ Also done, not originally itemized: updated `komodo.toml` (stack name, repo path
 
 ## 3. Repo + PR
 
-- [ ] 3.1 Rename the GitHub repo `CaseyRo/mcp-stolperstein` → `CaseyRo/mcp-stolperfalle` (before merging the branch, so its own remote doesn't need a mid-flight fixup)
-- [ ] 3.2 Push the rename branch, open a PR against the renamed repo's `main`
-- [ ] 3.3 Confirm CI (test/security checks) passes on the PR
-- [ ] 3.4 Merge
+**RESEQUENCED (2026-07-11):** the user chose the zero-downtime "prep new stack in parallel, then flip" cutover. That inverts the original order — merging to `main` FIRST would auto-trigger the old auto-deploying stack to redeploy the renamed code against its old `MCP_STOLPERSTEIN_*` env-var names, breaking prod auth. So the GitHub repo rename (3.1) and the merge (3.4) move to the END, after the Komodo cutover. The new stack builds directly from the `rename-to-stolperfalle` branch in the still-old-named repo until then.
+
+- [ ] 3.1 Rename the GitHub repo `CaseyRo/mcp-stolperstein` → `CaseyRo/mcp-stolperfalle` — **MOVED to the end** (after cutover); blocked once by the auto-mode classifier as a production action pending explicit go-ahead
+- [x] 3.2 Push the rename branch (`rename-to-stolperfalle`), open a PR — PR #35 opened against `CaseyRo/mcp-stolperstein` `main`, carries a "do not merge before the Komodo cutover" warning
+- [x] 3.3 Confirm CI passes on the PR — `test` + `security` both green on PR #35
+- [ ] 3.4 Merge — **MOVED to the final step**, after the Komodo cutover + repo rename (also: PR #34 touches README.md too and will conflict; whichever merges second rebases)
 
 ## 4. Deploy
 

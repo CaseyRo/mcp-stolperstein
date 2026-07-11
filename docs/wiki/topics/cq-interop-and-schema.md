@@ -136,6 +136,7 @@ Operator entrypoints: `mcp-stolperfalle migrate` (runs the runner, prints `from 
 
 ## Sources
 
+- [[../../../README]]
 - [[../../../docs/cq-extensions]]
 - [[../../../openspec/specs/cq-interop/spec]]
 - [[../../../openspec/changes/cq-v1-alignment-and-hooks/specs/cq-interop/spec]]

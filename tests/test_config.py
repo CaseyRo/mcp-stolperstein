@@ -9,7 +9,7 @@ def test_default_settings(monkeypatch):
     monkeypatch.setenv("TRANSPORT", "stdio")
     monkeypatch.setenv("CQ_LOCAL_DB_PATH", "/tmp/test.db")
 
-    from stolperstein.config import Settings
+    from stolperfalle.config import Settings
 
     s = Settings()
     assert s.transport == "stdio"
@@ -20,9 +20,9 @@ def test_default_settings(monkeypatch):
 
 def test_ensure_api_key_generates(monkeypatch):
     """ensure_api_key() auto-generates stmcp_ key when not set."""
-    monkeypatch.setenv("MCP_STOLPERSTEIN_API_KEY", "")
+    monkeypatch.setenv("MCP_STOLPERFALLE_API_KEY", "")
 
-    from stolperstein.config import Settings
+    from stolperfalle.config import Settings
 
     s = Settings()
     key = s.ensure_api_key()
@@ -33,9 +33,9 @@ def test_ensure_api_key_generates(monkeypatch):
 
 def test_ensure_api_key_preserves_existing(monkeypatch):
     """ensure_api_key() returns existing key when set."""
-    monkeypatch.setenv("MCP_STOLPERSTEIN_API_KEY", "stmcp_existing_key")
+    monkeypatch.setenv("MCP_STOLPERFALLE_API_KEY", "stmcp_existing_key")
 
-    from stolperstein.config import Settings
+    from stolperfalle.config import Settings
 
     s = Settings()
     assert s.ensure_api_key() == "stmcp_existing_key"
@@ -43,21 +43,21 @@ def test_ensure_api_key_preserves_existing(monkeypatch):
 
 def test_base_url_from_public_url(monkeypatch):
     """base_url uses public URL when set."""
-    monkeypatch.setenv("MCP_STOLPERSTEIN_PUBLIC_URL", "https://mcp-stolperstein.cdit-dev.de")
+    monkeypatch.setenv("MCP_STOLPERFALLE_PUBLIC_URL", "https://mcp-stolperfalle.cdit-dev.de")
 
-    from stolperstein.config import Settings
+    from stolperfalle.config import Settings
 
     s = Settings()
-    assert s.base_url == "https://mcp-stolperstein.cdit-dev.de"
+    assert s.base_url == "https://mcp-stolperfalle.cdit-dev.de"
 
 
 def test_base_url_computed_from_host_port(monkeypatch):
     """base_url computed from host:port when no public URL."""
-    monkeypatch.setenv("MCP_STOLPERSTEIN_PUBLIC_URL", "")
+    monkeypatch.setenv("MCP_STOLPERFALLE_PUBLIC_URL", "")
     monkeypatch.setenv("HOST", "0.0.0.0")
     monkeypatch.setenv("PORT", "8716")
 
-    from stolperstein.config import Settings
+    from stolperfalle.config import Settings
 
     s = Settings()
     assert s.base_url == "http://0.0.0.0:8716"

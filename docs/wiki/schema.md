@@ -1,6 +1,6 @@
 ---
 generated: 2026-07-07
-name: mcp-stolperstein
+name: mcp-stolperfalle
 ---
 
 # Wiki Schema

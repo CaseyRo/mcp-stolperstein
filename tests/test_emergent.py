@@ -24,7 +24,7 @@ def _plant_miss(store, text: str, embedding: list[float], offset_hours: int = 0)
 
 @pytest.mark.asyncio
 async def test_insufficient_misses_emits_nothing(store):
-    from stolperstein.emergent import detect_emergent
+    from stolperfalle.emergent import detect_emergent
     # Only 2 misses — below the default EMERGENT_MIN_MISSES=5 threshold.
     for i in range(2):
         _plant_miss(store, f"obscure {i}", [0.5] * 384)
@@ -33,7 +33,7 @@ async def test_insufficient_misses_emits_nothing(store):
 
 @pytest.mark.asyncio
 async def test_clustered_misses_emit_tool_gap_signal(store, monkeypatch):
-    from stolperstein.emergent import detect_emergent
+    from stolperfalle.emergent import detect_emergent
 
     # Plant 6 similar misses across 3 different hour-buckets.
     for i in range(6):
@@ -54,18 +54,18 @@ async def test_clustered_misses_emit_tool_gap_signal(store, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_disabled_flag_suppresses(store, monkeypatch):
-    from stolperstein.emergent import detect_emergent
+    from stolperfalle.emergent import detect_emergent
     for i in range(8):
         _plant_miss(store, f"something #{i}", [1.0] * 384, offset_hours=i)
 
-    import stolperstein.config
-    monkeypatch.setattr(stolperstein.config.settings, "stolperstein_emergent_disabled", True)
+    import stolperfalle.config
+    monkeypatch.setattr(stolperfalle.config.settings, "stolperfalle_emergent_disabled", True)
     assert detect_emergent(store) == []
 
 
 @pytest.mark.asyncio
 async def test_ttl_prune_drops_old_misses(store):
-    from stolperstein.emergent import detect_emergent
+    from stolperfalle.emergent import detect_emergent
 
     # Plant misses older than 30 days + fresh ones below threshold.
     for i in range(10):
@@ -80,7 +80,7 @@ async def test_ttl_prune_drops_old_misses(store):
 
 @pytest.mark.asyncio
 async def test_dedupe_prevents_reemission(store):
-    from stolperstein.emergent import detect_emergent
+    from stolperfalle.emergent import detect_emergent
 
     for i in range(6):
         _plant_miss(store, f"miss A #{i}", [1.0] * 384, offset_hours=i)

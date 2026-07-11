@@ -1,12 +1,12 @@
 {
-  "name": "stolperstein-local",
+  "name": "stolperfalle-local",
   "owner": {
     "name": "Casey Romkes"
   },
   "plugins": [
     {
-      "name": "stolperstein",
-      "source": "./plugin/stolperstein",
+      "name": "stolperfalle",
+      "source": "./plugin/stolperfalle",
       "description": "Experiential knowledge capture and recall for AI coding agents"
     }
   ]

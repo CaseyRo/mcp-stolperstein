@@ -9,7 +9,7 @@ status: active
 
 ## Pattern
 
-A single Ed25519 `did:key:z...` per install is the spine of identity, reused across three otherwise-separate concerns. The same DID is the KU's **`proposer_did`** (mapped to upstream `created_by`), its **`owner_org`** (the tenant that owns the row), and an entry in **`contributing_orgs`** when a confirmation arrives. The private key deliberately lives **outside** the SQLite DB (a file at `/data/stolperstein.key` mode 0600, or a base64 env var); the DB stores only the public key and the derived DID string. That one identity primitive then feeds trust-weighting: confidence scoring is diversity-weighted by the count of *distinct* contributing orgs, so a confirmation from a new org boosts more than another from an already-contributing one.
+A single Ed25519 `did:key:z...` per install is the spine of identity, reused across three otherwise-separate concerns. The same DID is the KU's **`proposer_did`** (mapped to upstream `created_by`), its **`owner_org`** (the tenant that owns the row), and an entry in **`contributing_orgs`** when a confirmation arrives. The private key deliberately lives **outside** the SQLite DB (a file at `/data/stolperfalle.key` mode 0600, or a base64 env var); the DB stores only the public key and the derived DID string. That one identity primitive then feeds trust-weighting: confidence scoring is diversity-weighted by the count of *distinct* contributing orgs, so a confirmation from a new org boosts more than another from an already-contributing one.
 
 ## Instances
 

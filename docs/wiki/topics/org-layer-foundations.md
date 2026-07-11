@@ -7,7 +7,7 @@ last_compiled: 2026-07-07
 
 ## Summary [coverage: high — 2 sources]
 
-Stolperstein is framed as Phase 1 of a "machine-readable org layer." Two capabilities lay that foundation without yet building the whole product: **multi-tenant primitives** (an `owner_org` on every Knowledge Unit plus a `TRUSTED_ORGS` visibility filter) and **emergent-signal detection** (capturing zero-result queries and clustering them into `tool-gap-signal` KUs).
+Stolperfalle is framed as Phase 1 of a "machine-readable org layer." Two capabilities lay that foundation without yet building the whole product: **multi-tenant primitives** (an `owner_org` on every Knowledge Unit plus a `TRUSTED_ORGS` visibility filter) and **emergent-signal detection** (capturing zero-result queries and clustering them into `tool-gap-signal` KUs).
 
 Both are deliberately foundation-only. `owner_org` is stamped on every KU and `query()` applies a read-side visibility filter, but the default is **trust-all** (`TRUSTED_ORGS="*"`) and there are **no write-side org permission checks** — `propose`/`confirm`/`flag`/ingest run without them. Enforceable per-org write/graduate permissions, per-org UI, and selective graduation are explicitly Phase 2. Emergent detection ships as a real module with a simple count-based clustering heuristic (cosine ≥0.8, ≥5 misses across ≥2 distinct hour-buckets, 7-day dedupe) so the algorithm can be swapped later without schema or tool churn. Adding the field and the module now is cheap; retrofitting either onto an existing install is expensive.
 
@@ -69,7 +69,7 @@ The `emergent` module SHALL aggregate recent `query_misses` into `tool-gap-signa
 3. Emitted KUs SHALL have: `kind="tool-gap-signal"`, `provenance.emergent=true`, `status="draft"`, `confidence=0.5`, `owner_org` = local install DID, a `summary` synthesized from a representative miss, a `detail` summarizing the cluster (e.g. "Agents searched for this topic {N} times over {T} days without a matching KU"), and an `action` that is an imperative to investigate or propose a covering KU.
 4. A cluster SHALL NOT re-emit within **7 days** (dedupe by embedding proximity to existing emergent KUs, cosine ≥0.8).
 
-Cadence: aggregation SHALL run on every `EMERGENT_DETECT_EVERY_N`-th `query()` call (default **10**) OR on explicit `mcp-stolperstein detect-emergent`. The trigger is a fire-and-forget background task that does not block the triggering `query()` response.
+Cadence: aggregation SHALL run on every `EMERGENT_DETECT_EVERY_N`-th `query()` call (default **10**) OR on explicit `mcp-stolperfalle detect-emergent`. The trigger is a fire-and-forget background task that does not block the triggering `query()` response.
 
 Scenarios: 6 misses at ≥0.8 cosine across 3 distinct hour-buckets in the past 30 days → next run emits a `tool-gap-signal` with `provenance.emergent=true`; only 2 similar misses → nothing emitted; a cluster that would emit but has a ≥0.8-similar emergent KU from the past 7 days → nothing emitted; the N-th `query()` returns on the normal latency budget while aggregation runs in the background.
 
@@ -77,13 +77,13 @@ Scenarios: 6 misses at ≥0.8 cosine across 3 distinct hour-buckets in the past 
 
 - `status()` SHALL report `tool_gap_signals` as `{grandfathered, emergent}` — grandfathered = `kind="tool-gap-signal"` AND `provenance.emergent=false` (migrated rows); emergent = `provenance.emergent=true`. Example: 3 migrated + 7 emergent → `tool_gap_signals: {grandfathered: 3, emergent: 7}`.
 - `status(debug=True)` SHALL additionally include a `recent_emergent` array of up to 10 most-recent emergent KUs by `first_observed`.
-- Aggregation SHALL be disableable via `STOLPERSTEIN_EMERGENT_DISABLED=true` or `EMERGENT_DETECT_EVERY_N=0`. When disabled, `query_misses` MAY still be captured (for future enablement) but no aggregation runs. Manual `mcp-stolperstein detect-emergent` under `STOLPERSTEIN_EMERGENT_DISABLED=true` SHALL print "emergent detection is disabled; set STOLPERSTEIN_EMERGENT_DISABLED=false to run" and exit 0 without aggregating.
+- Aggregation SHALL be disableable via `STOLPERFALLE_EMERGENT_DISABLED=true` or `EMERGENT_DETECT_EVERY_N=0`. When disabled, `query_misses` MAY still be captured (for future enablement) but no aggregation runs. Manual `mcp-stolperfalle detect-emergent` under `STOLPERFALLE_EMERGENT_DISABLED=true` SHALL print "emergent detection is disabled; set STOLPERFALLE_EMERGENT_DISABLED=false to run" and exit 0 without aggregating.
 
 ## Design & Architecture [coverage: medium — 2 sources]
 
 **Visibility filtering.** `owner_org` is a `TEXT NOT NULL DEFAULT <install-did>` column added in `m0002_provenance_and_org`. Because the filter is applied *before* confidence/severity ranking (rather than as a post-rank pass), untrusted rows never enter the scoring set, and the same predicate covers both the local store and merged team-API results. The predicate is a three-way OR: own DID, membership in `TRUSTED_ORGS`, or the `"*"` trust-all short-circuit. `owner_org` derives from the per-install Ed25519 `did:key` identity (whose private key lives outside the DB), so ownership and provenance share one identifier rather than introducing a separate tenant ID.
 
-**Emergent clustering job.** The capability lives in `src/stolperstein/emergent.py`. Query misses accumulate in a small `query_misses` rolling table (added by `m0004_emergent_scaffolding`, 30-day TTL). The aggregation is a count-based clustering pass: prune stale misses, group by embedding cosine similarity, and emit a `tool-gap-signal` KU for any bin that clears the miss/session thresholds. "Session" is approximated by distinct 1-hour time buckets rather than tracked session IDs — a deliberate simplification. It is explicitly *not* ML-sophisticated; the design flags richer heuristics (ML clustering, LLM summarization of clusters) as Phase 2. The module boundary is the point: later changes can replace the algorithm without touching the schema or the MCP tool surface.
+**Emergent clustering job.** The capability lives in `src/stolperfalle/emergent.py`. Query misses accumulate in a small `query_misses` rolling table (added by `m0004_emergent_scaffolding`, 30-day TTL). The aggregation is a count-based clustering pass: prune stale misses, group by embedding cosine similarity, and emit a `tool-gap-signal` KU for any bin that clears the miss/session thresholds. "Session" is approximated by distinct 1-hour time buckets rather than tracked session IDs — a deliberate simplification. It is explicitly *not* ML-sophisticated; the design flags richer heuristics (ML clustering, LLM summarization of clusters) as Phase 2. The module boundary is the point: later changes can replace the algorithm without touching the schema or the MCP tool surface.
 
 **Trigger model.** Aggregation is event-based, piggybacking on the `EMERGENT_DETECT_EVERY_N`-th `query()` call as a fire-and-forget background task so it never blocks the query response, with the CLI `detect-emergent` as the explicit escape hatch. (Whether this should instead be time-based is an open question — see below.)
 
@@ -98,7 +98,7 @@ Scenarios: 6 misses at ≥0.8 cosine across 3 distinct hour-buckets in the past 
 - **`query_misses`** — internal rolling table (not on the wire), added by `m0004_emergent_scaffolding`. Stores truncated query text, the 384-dim `sqlite_vec` embedding, and a timestamp; 30-day TTL.
 - **`by_owner_org`** (status debug) and **`tool_gap_signals: {grandfathered, emergent}`** / **`recent_emergent`** (status) are reporting projections, not stored columns.
 
-`TRUSTED_ORGS`, `EMERGENT_DETECT_EVERY_N`, `EMERGENT_MIN_MISSES`, `EMERGENT_MIN_SESSIONS`, and `STOLPERSTEIN_EMERGENT_DISABLED` are the operator-facing env controls for this layer. On DID identifiers: `did:key:z...` is treated as an opaque identifier — no DID-document resolution, no registry, no resolver (out of scope).
+`TRUSTED_ORGS`, `EMERGENT_DETECT_EVERY_N`, `EMERGENT_MIN_MISSES`, `EMERGENT_MIN_SESSIONS`, and `STOLPERFALLE_EMERGENT_DISABLED` are the operator-facing env controls for this layer. On DID identifiers: `did:key:z...` is treated as an opaque identifier — no DID-document resolution, no registry, no resolver (out of scope).
 
 ## Status & Open Questions [coverage: medium — 2 sources]
 

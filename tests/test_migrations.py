@@ -13,7 +13,7 @@ import sqlite3
 import jsonschema
 import pytest
 
-from stolperstein import migrations
+from stolperfalle import migrations
 
 
 _V0_SCHEMA_DDL = """
@@ -129,7 +129,7 @@ def test_v0_db_fully_migrates(v0_db):
 
     # Every row's to_cq_json_strict() validates against vendored schema.
     from pathlib import Path
-    from stolperstein.store import KnowledgeStore
+    from stolperfalle.store import KnowledgeStore
     schema = json.loads(
         (Path(__file__).parent / "fixtures" / "cq" / "knowledge_unit.json").read_text()
     )
@@ -185,7 +185,7 @@ def test_rollback_on_mid_migration_failure(v0_db, monkeypatch):
 
     # Sabotage m0003 to raise.
     original_run = migrations.run
-    import stolperstein.migrations.m0003_stolperstein_extensions as m3
+    import stolperfalle.migrations.m0003_stolperstein_extensions as m3
     original_up = m3.up
 
     def _sabotage(conn):  # noqa: F811 — intentional override

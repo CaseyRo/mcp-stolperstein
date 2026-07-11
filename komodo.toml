@@ -1,17 +1,17 @@
 [[stack]]
-name = "git-mcp-stolperstein-nebula"
-description = "Stolperstein — Experiential knowledge capture MCP server"
+name = "git-mcp-stolperfalle-nebula"
+description = "Stolperfalle — Experiential knowledge capture MCP server"
 deploy = true
 tags = ["mcp"]
 
 [stack.config]
 server_id = "nebula-1"
 git_provider = "github.com"
-repo = "CaseyRo/mcp-stolperstein"
+repo = "CaseyRo/mcp-stolperfalle"
 branch = "main"
 environment = """
-MCP_STOLPERSTEIN_API_KEY = [[MCP_STOLPERSTEIN_API_KEY]]
-MCP_STOLPERSTEIN_PUBLIC_URL = https://mcp-stolperstein.cdit-dev.de
+MCP_STOLPERFALLE_API_KEY = [[MCP_STOLPERFALLE_API_KEY]]
+MCP_STOLPERFALLE_PUBLIC_URL = https://mcp-stolperfalle.cdit-dev.de
 CF_ACCESS_CLIENT_SECRET =
 CQ_SIYUAN_URL = http://siyuan:6806
 CQ_SIYUAN_TOKEN = [[CQ_SIYUAN_TOKEN]]

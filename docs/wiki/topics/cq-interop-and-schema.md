@@ -7,24 +7,24 @@ last_compiled: 2026-07-07
 
 ## Summary [coverage: high — 5 sources]
 
-Stolperstein's Knowledge Unit (KU) model is a **superset** of Mozilla AI's upstream `mozilla-ai/cq` `schema/knowledge_unit.json`. The interop contract is *conform-plus-extend*: everything upstream defines is emitted exactly as upstream expects, and everything Stolperstein needs beyond that rides along as documented, namespaced **extensions**.
+Stolperfalle's Knowledge Unit (KU) model is a **superset** of Mozilla AI's upstream `mozilla-ai/cq` `schema/knowledge_unit.json`. The interop contract is *conform-plus-extend*: everything upstream defines is emitted exactly as upstream expects, and everything Stolperfalle needs beyond that rides along as documented, namespaced **extensions**.
 
-Two serializers implement this split in `src/stolperstein/models.py`:
+Two serializers implement this split in `src/stolperfalle/models.py`:
 
-- **`to_cq_json_strict()`** — emits the upstream-valid wire shape. Stolperstein extension fields are carried inside the upstream **`extensions` slot** under `stolperstein:*` keys (e.g. `evidence.severity` → `extensions["stolperstein:severity"]`). Validated on every commit against a vendored, pinned copy of the upstream schema in `tests/fixtures/cq/knowledge_unit.json`.
+- **`to_cq_json_strict()`** — emits the upstream-valid wire shape. Stolperfalle extension fields are carried inside the upstream **`extensions` slot** under `stolperstein:*` keys (e.g. `evidence.severity` → `extensions["stolperstein:severity"]`). Validated on every commit against a vendored, pinned copy of the upstream schema in `tests/fixtures/cq/knowledge_unit.json`.
 - **`to_cq_json_rich()`** — emits the full internal superset with every extension as a first-class field (`evidence.severity`, top-level `kind`, etc.), *no* `extensions` object. Used for local dumps, debugging, and extension-aware consumers.
 
 A third serializer, `to_cq_v0()`, emits the pre-alignment legacy shape for the Siyuan-sync transition, gated by `CQ_SIYUAN_SCHEMA_VERSION=0`.
 
-The canonical extension registry is `docs/cq-extensions.md`; every `stolperstein:*` key on the wire must appear there. Wire compatibility across schema changes is enforced by the versioned migration framework under `src/stolperstein/migrations/`. Upstream engagement runs through discussion [#286](https://github.com/mozilla-ai/cq/discussions/286), scoping issue [#406](https://github.com/mozilla-ai/cq/issues/406), and the slot-merge PR [#453](https://github.com/mozilla-ai/cq/pull/453).
+The canonical extension registry is `docs/cq-extensions.md`; every `stolperstein:*` key on the wire must appear there. Wire compatibility across schema changes is enforced by the versioned migration framework under `src/stolperfalle/migrations/`. Upstream engagement runs through discussion [#286](https://github.com/mozilla-ai/cq/discussions/286), scoping issue [#406](https://github.com/mozilla-ai/cq/issues/406), and the slot-merge PR [#453](https://github.com/mozilla-ai/cq/pull/453).
 
 ## Rationale & Context [coverage: high — 6 sources]
 
-**Why conform-plus-extend rather than fork.** Stolperstein is an independent, cq-compatible local node aimed at single-operator and small-team (German KMU / Mittelstand) deployments, part of CDiT's "machine-readable org layer" thrust. Silently forking the schema would break interop with any other cq consumer (team API, global tier, external validators) and forfeit the whole point of a shared protocol. The chosen posture is: stay strictly valid on the wire, surface the gaps upstream rather than diverge quietly.
+**Why conform-plus-extend rather than fork.** Stolperfalle is an independent, cq-compatible local node aimed at single-operator and small-team (German KMU / Mittelstand) deployments, part of CDiT's "machine-readable org layer" thrust. Silently forking the schema would break interop with any other cq consumer (team API, global tier, external validators) and forfeit the whole point of a shared protocol. The chosen posture is: stay strictly valid on the wire, surface the gaps upstream rather than diverge quietly.
 
 **The upstream-drift / validation problem.** The strict serializer exists precisely so that the wire shape can be validated against a *pinned* upstream schema rather than a moving `main`. Inbound payloads (from a team API, future import CLI) are validated against the vendored schema **before** any storage or transformation, and rejected on any failure — no partial ingest. This makes upstream drift a controlled, single-commit event (re-vendor the pin, re-run the full conformance corpus) instead of a silent runtime break.
 
-**The `additionalProperties: false` blocker.** The original reason for a strict/rich split was that upstream's schema was `additionalProperties: false` *everywhere*, so any Stolperstein field on the wire would fail validation. Strict mode therefore *stripped* every extension; rich mode kept them but was, by design, invalid against the upstream schema. This was flagged upstream as "the tightest blocker for experimentation." Stolperstein's scoping issue [#406](https://github.com/mozilla-ai/cq/issues/406) proposed an explicit `extensions` object rather than relaxing to `additionalProperties: true`; upstream merged it in [#453](https://github.com/mozilla-ai/cq/pull/453) on 2026-06-23. That lifted the blocker: strict output can now legally *carry* extensions instead of dropping them, so downstream consumers stop losing `severity`, `kind`, and provenance data on graduation.
+**The `additionalProperties: false` blocker.** The original reason for a strict/rich split was that upstream's schema was `additionalProperties: false` *everywhere*, so any Stolperfalle field on the wire would fail validation. Strict mode therefore *stripped* every extension; rich mode kept them but was, by design, invalid against the upstream schema. This was flagged upstream as "the tightest blocker for experimentation." Stolperfalle's scoping issue [#406](https://github.com/mozilla-ai/cq/issues/406) proposed an explicit `extensions` object rather than relaxing to `additionalProperties: true`; upstream merged it in [#453](https://github.com/mozilla-ai/cq/pull/453) on 2026-06-23. That lifted the blocker: strict output can now legally *carry* extensions instead of dropping them, so downstream consumers stop losing `severity`, `kind`, and provenance data on graduation.
 
 **Extensions vs. core promotion are orthogonal.** Upstream's per-field verdicts (declined / deferred / etc., from the 2026-04-28 maintainer response to #286) govern whether a field is promoted into the **core** schema. They do *not* govern slot carriage — any documented field may ride the `extensions` slot regardless of its core-promotion verdict.
 
@@ -68,10 +68,10 @@ The canonical extension registry is `docs/cq-extensions.md`; every `stolperstein
 
 ## Design & Architecture [coverage: high — 5 sources]
 
-**Serialization lives in one place.** All three shapes (`_strict`, `_rich`, `_v0`) are methods on the `KnowledgeUnit` Pydantic model in `src/stolperstein/models.py`. The 2026-07 dead-code cleanup removed the sync clients, `flags`, and `graduation_history` from the live model, leaving the strict serializer small enough that adopting the slot touched essentially one method plus fixtures and docs.
+**Serialization lives in one place.** All three shapes (`_strict`, `_rich`, `_v0`) are methods on the `KnowledgeUnit` Pydantic model in `src/stolperfalle/models.py`. The 2026-07 dead-code cleanup removed the sync clients, `flags`, and `graduation_history` from the live model, leaving the strict serializer small enough that adopting the slot touched essentially one method plus fixtures and docs.
 
 **Extensions-slot design decisions** (from the adopt-cq-extensions-slot design doc):
-1. **Namespace `stolperstein`** — not `st` or `cdit`; readable, unambiguous, matches the repo/plugin name, and satisfies the key-format constraint.
+1. **Namespace `stolperfalle`** — not `st` or `cdit`; readable, unambiguous, matches the repo/plugin name, and satisfies the key-format constraint.
 2. **Flat keys, JSON-native values** — `stolperstein:severity` → `"high"`, `stolperstein:related` → array of `{type, target_id}` dicts. A single `stolperstein:meta` blob was rejected: per-field keys let a consumer pick fields without parsing a nested contract, and mirror how the registry documents each field.
 3. **Omit-when-empty** — null/empty values produce no key; a zero-extension KU omits the object. Keeps payloads minimal and makes "no extensions" indistinguishable from a pre-slot producer.
 4. **Re-vendor as a straight copy of upstream `main`** (post-#453 SHA recorded in `tests/fixtures/cq/CQ_SCHEMA_REF.md`), never a hand-edit — the fixture is the oracle; hand-edits drift.
@@ -82,16 +82,16 @@ The canonical extension registry is `docs/cq-extensions.md`; every `stolperstein
 **Migration framework.** `store._init_baseline()` creates v0-shape tables on a fresh install, then the runner applies the ordered `mNNNN_*` modules. Migration runs as the first action inside `_get_db()` on server boot, so a single deploy brings the DB forward. The v0→v1 chain `m0000`→`m0005` transforms an existing DB without loss:
 - **`m0000_ku_id_format_fix`** (breaking) — pad legacy short-hex ids to `ku_ + <32 hex>`; rewrite `related[].target_id`, `superseded_by`, FTS5, and `ku_embeddings` references.
 - **`m0001_cq_conformance_rename`** (breaking) — rename `domain` → `domains`; add `last_confirmed_at`, `superseded_by`, `context_languages`, `context_frameworks`, `context_pattern`; migrate `superseded_by`-typed `related` edges into the new column; drop `last_confirmed`.
-- **`m0002_stolperstein_extensions`** (breaking) — add extension columns not in upstream CQ: `evidence_severity` (default `medium`), `context_environment`; `kind`/`status`/`staleness_policy`/`related` already existed from v0.
-- **`m0003_provenance_and_org`** (breaking) — create `install_identity` (`did`, `public_key`, `created_at` — **no** private-key column; the Ed25519 private key lives at `/data/stolperstein.key` mode `0o600` or in `MCP_STOLPERSTEIN_SIGNING_KEY`); add `proposer_did`, `graduation_history`, `provenance_emergent`, `owner_org`; backfill `proposer_did` and `owner_org` to the install DID.
+- **`m0002_stolperfalle_extensions`** (breaking) — add extension columns not in upstream CQ: `evidence_severity` (default `medium`), `context_environment`; `kind`/`status`/`staleness_policy`/`related` already existed from v0.
+- **`m0003_provenance_and_org`** (breaking) — create `install_identity` (`did`, `public_key`, `created_at` — **no** private-key column; the Ed25519 private key lives at `/data/stolperfalle.key` mode `0o600` or in `MCP_STOLPERFALLE_SIGNING_KEY`); add `proposer_did`, `graduation_history`, `provenance_emergent`, `owner_org`; backfill `proposer_did` and `owner_org` to the install DID.
 - **`m0004_gap_signal_rename`** (additive) — `kind='gap-signal'` → `'tool-gap-signal'`, set `provenance_emergent=0` (grandfathered).
 - **`m0005_emergent_scaffolding`** (additive) — create `query_misses` table + `created_at` index for emergent detection.
 
-Operator entrypoints: `mcp-stolperstein migrate` (runs the runner, prints `from → to`, refuses `--db-path` outside `/data/`) and `mcp-stolperstein prune-backups [--confirm]` (never auto-cleans snapshots).
+Operator entrypoints: `mcp-stolperfalle migrate` (runs the runner, prints `from → to`, refuses `--db-path` outside `/data/`) and `mcp-stolperfalle prune-backups [--confirm]` (never auto-cleans snapshots).
 
 ## Schema & Interop [coverage: high — 4 sources]
 
-**The `extensions` slot (#453).** An optional top-level object on `KnowledgeUnit`; keys must match `^[a-z0-9][a-z0-9_-]*:\S+$`; **max 20 properties**; values carry **no protocol semantics** and are validated in the Go/Python SDKs and CLI. It was deliberately scoped *outside* any signing envelope. Stolperstein uses 9 keys for its single implementation.
+**The `extensions` slot (#453).** An optional top-level object on `KnowledgeUnit`; keys must match `^[a-z0-9][a-z0-9_-]*:\S+$`; **max 20 properties**; values carry **no protocol semantics** and are validated in the Go/Python SDKs and CLI. It was deliberately scoped *outside* any signing envelope. Stolperfalle uses 9 keys for its single implementation.
 
 **The extension registry** (`docs/cq-extensions.md`) — every `stolperstein:*` key with its upstream verdict:
 
@@ -101,12 +101,12 @@ Operator entrypoints: `mcp-stolperstein migrate` (runs the runner, prints `from 
 | `evidence.contributing_orgs` | `stolperstein:contributing_orgs` | `array[string]` (DIDs) | **declined** | Diversity-weighted confidence. Upstream: per-KU org arrays are a profile-building vector when joined; compute diversity from confirmation provenance instead. |
 | `context.environment` | `stolperstein:environment` | string | **deferred** | Build/runtime scope (`macos`, `cloudflare-workers`, `node-22`). Upstream: fold into `frameworks`; revisit via [#170](https://github.com/mozilla-ai/cq/issues/170) if still noisy. |
 | `kind` | `stolperstein:kind` | `pitfall\|workaround\|tool-recommendation` | **declined** | Coarse KU typing. Upstream: derive classification from observed usage, not contributor declaration. |
-| `status` | `stolperstein:status` | `draft\|active\|stale\|disputed\|archived` | **stolperstein-specific** | Lifecycle state machine (upstream models lifecycle only via `flags[]`). |
-| `staleness_policy` | `stolperstein:staleness_policy` | string | **stolperstein-specific** | Per-KU decay-policy override. |
-| `related[]` | `stolperstein:related` | `[{type, target_id}]` | **stolperstein-specific** | Relationship graph beyond `superseded_by`. |
-| `owner_org` | `stolperstein:owner_org` | string (DID) | **stolperstein-specific** | Multi-tenant read filter via `TRUSTED_ORGS` (Phase 1 foundation). Upstream has `tier: local\|private\|public` for a different slice. |
+| `status` | `stolperstein:status` | `draft\|active\|stale\|disputed\|archived` | **stolperfalle-specific** | Lifecycle state machine (upstream models lifecycle only via `flags[]`). |
+| `staleness_policy` | `stolperstein:staleness_policy` | string | **stolperfalle-specific** | Per-KU decay-policy override. |
+| `related[]` | `stolperstein:related` | `[{type, target_id}]` | **stolperfalle-specific** | Relationship graph beyond `superseded_by`. |
+| `owner_org` | `stolperstein:owner_org` | string (DID) | **stolperfalle-specific** | Multi-tenant read filter via `TRUSTED_ORGS` (Phase 1 foundation). Upstream has `tier: local\|private\|public` for a different slice. |
 | `provenance.proposer_did` | (→ core `created_by`) | string (DID) | **deferred** | Strict mode emits it as upstream `created_by`; cross-install attribution portability invited as its own thread. |
-| `provenance.emergent` | `stolperstein:emergent` | boolean | **stolperstein-specific** | Distinguishes emergent-aggregation `tool-gap-signal` KUs from grandfathered migration artifacts. |
+| `provenance.emergent` | `stolperstein:emergent` | boolean | **stolperfalle-specific** | Distinguishes emergent-aggregation `tool-gap-signal` KUs from grandfathered migration artifacts. |
 
 **Removed from the live model.** `provenance.graduation_history` (`array[{timestamp, target, reviewer_did, agent}]`, upstream verdict **declined** — governance belongs in admin tooling) was removed in the 2026-07 cleanup because nothing wrote it (graduation is Phase-2). The `graduation_history` DB column from the provenance migration remains; the field returns with Phase-2 graduation.
 
@@ -117,25 +117,26 @@ Operator entrypoints: `mcp-stolperstein migrate` (runs the runner, prints `from 
 
 ## Status & Open Questions [coverage: medium — 4 sources]
 
-**Verdict legend** (from the 2026-04-28 maintainer response to #286): *proposed* (filed, awaiting), *accepted* (merged upstream — unblock by re-vendoring and moving the row out), *declined* (decided against on the merits — stays local-only unless reopened), *deferred* (need acknowledged but wanted in a different shape/thread), *stolperstein-specific* (never intended for upstream).
+**Verdict legend** (from the 2026-04-28 maintainer response to #286): *proposed* (filed, awaiting), *accepted* (merged upstream — unblock by re-vendoring and moving the row out), *declined* (decided against on the merits — stays local-only unless reopened), *deferred* (need acknowledged but wanted in a different shape/thread), *stolperfalle-specific* (never intended for upstream).
 
 **Current standings:**
 - **Accepted / shipped:** the `extensions` slot itself (proposed as #406, merged as #453 on 2026-06-23). No individual *field* has yet been promoted into core, so the "accepted" registry table does not exist yet.
 - **Declined for core promotion:** `severity`, `contributing_orgs`, `kind` — remain local-only but now ride the slot on the wire.
 - **Deferred:** `context.environment` (revisit via #170), `provenance.proposer_did` (attribution-portability thread invited).
-- **Stolperstein-specific (never upstream):** `status`, `staleness_policy`, `related[]`, `owner_org`, `provenance.emergent`.
+- **Stolperfalle-specific (never upstream):** `status`, `staleness_policy`, `related[]`, `owner_org`, `provenance.emergent`.
 - **Declined + removed from model:** `graduation_history` (EU AI Act audit-trail thread invited when concrete requirements exist).
 
 **Archive state.** The `adopt-cq-extensions-slot` change is **archived** (`openspec/changes/archive/2026-07-07-adopt-cq-extensions-slot/`) with all tasks checked off: re-vendored pin, serializer emission, inverted tests (extensions now asserted *present* under `stolperstein:*` and still schema-valid), key-regex assertion, docs/resource updates, and green `pytest`/`ruff`/`mypy`. Its requirement was synced into the live spec `openspec/specs/cq-interop/spec.md`.
 
 **Pending / open questions:**
 - **`maxProperties: 20` headroom.** Comfortable at 9 keys for one implementation, but two or three implementations annotating the same unit (the working-group scenario) would approach the cap. Flagged upstream before it becomes load-bearing.
-- **Omit-when-empty wants a spec sentence.** Stolperstein treats key-presence as meaningful; without a documented convention, implementations may diverge (half shipping `"ns:field": null`). Raised as a suggested schema-docs recommendation.
+- **Omit-when-empty wants a spec sentence.** Stolperfalle treats key-presence as meaningful; without a documented convention, implementations may diverge (half shipping `"ns:field": null`). Raised as a suggested schema-docs recommendation.
 - **Privacy allowlist for outbound extensions.** `owner_org` and `contributing_orgs` are org-identifying signals (the #286 privacy concern). They only ship when someone actually transmits strict payloads, and today **no transmit path exists** post-cleanup. A per-field emit allowlist is deferred to Phase-2 graduation design.
 - **The adopter comment for #286** (announcing production slot emission, output validating against pin `cb1f81f`) is drafted but held for Casey's review — not posted autonomously.
 
 ## Sources
 
+- [[../../../README]]
 - [[../../../docs/cq-extensions]]
 - [[../../../openspec/specs/cq-interop/spec]]
 - [[../../../openspec/changes/cq-v1-alignment-and-hooks/specs/cq-interop/spec]]

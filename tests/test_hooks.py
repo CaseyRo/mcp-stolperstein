@@ -1,6 +1,6 @@
 """Unit tests for Claude Code hook handlers.
 
-Hook handlers live under `plugin/stolperstein/hooks/handlers/`. They're
+Hook handlers live under `plugin/stolperfalle/hooks/handlers/`. They're
 standalone scripts, so we import them by adding that directory to sys.path.
 """
 
@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 _HANDLERS_DIR = (
-    Path(__file__).parent.parent / "plugin" / "stolperstein" / "hooks" / "handlers"
+    Path(__file__).parent.parent / "plugin" / "stolperfalle" / "hooks" / "handlers"
 )
 
 
@@ -133,7 +133,7 @@ class TestDebugTrace:
 
     def test_trace_writes_valid_json_line_when_enabled(self, tmp_path, monkeypatch):
         self._isolate_tmpdir(tmp_path, monkeypatch)
-        monkeypatch.setenv("STOLPERSTEIN_HOOKS_DEBUG", "1")
+        monkeypatch.setenv("STOLPERFALLE_HOOKS_DEBUG", "1")
         self.debug.trace("PostToolUse", "inject", ku_id="ku_x")
         lines = self.debug.trace_path().read_text().splitlines()
         assert len(lines) == 1
@@ -145,13 +145,13 @@ class TestDebugTrace:
 
     def test_trace_writes_nothing_when_disabled(self, tmp_path, monkeypatch):
         self._isolate_tmpdir(tmp_path, monkeypatch)
-        monkeypatch.delenv("STOLPERSTEIN_HOOKS_DEBUG", raising=False)
+        monkeypatch.delenv("STOLPERFALLE_HOOKS_DEBUG", raising=False)
         self.debug.trace("PostToolUse", "inject")
         assert not self.debug.trace_path().exists()
 
     def test_rotation_when_file_exceeds_cap(self, tmp_path, monkeypatch):
         self._isolate_tmpdir(tmp_path, monkeypatch)
-        monkeypatch.setenv("STOLPERSTEIN_HOOKS_DEBUG", "1")
+        monkeypatch.setenv("STOLPERFALLE_HOOKS_DEBUG", "1")
         monkeypatch.setattr(self.debug, "_MAX_BYTES", 64)
         path = self.debug.trace_path()
         path.write_text("x" * 100 + "\n")  # over the (patched) cap
@@ -166,7 +166,7 @@ class TestDebugTrace:
 
     def test_rotation_replaces_existing_backup(self, tmp_path, monkeypatch):
         self._isolate_tmpdir(tmp_path, monkeypatch)
-        monkeypatch.setenv("STOLPERSTEIN_HOOKS_DEBUG", "1")
+        monkeypatch.setenv("STOLPERFALLE_HOOKS_DEBUG", "1")
         monkeypatch.setattr(self.debug, "_MAX_BYTES", 64)
         path = self.debug.trace_path()
         path.with_name(path.name + ".1").write_text("old backup\n")
@@ -176,7 +176,7 @@ class TestDebugTrace:
 
     def test_no_rotation_below_cap(self, tmp_path, monkeypatch):
         self._isolate_tmpdir(tmp_path, monkeypatch)
-        monkeypatch.setenv("STOLPERSTEIN_HOOKS_DEBUG", "1")
+        monkeypatch.setenv("STOLPERFALLE_HOOKS_DEBUG", "1")
         path = self.debug.trace_path()
         self.debug.trace("Stop", "first")
         self.debug.trace("Stop", "second")
@@ -219,7 +219,7 @@ class TestInjectionWrapper:
             "evidence": {"confidence": 0.7},
         }
         out = self.inject.wrap_injection(ku, source="Bash error")
-        assert "Note from Stolperstein (from your previous Bash error):" in out
+        assert "Note from Stolperfalle (from your previous Bash error):" in out
         assert "ku_abc" in out
         assert "0.70" in out
 
@@ -242,7 +242,7 @@ class TestRateLimit:
 
     def _fresh_state_dir(self, tmp_path, monkeypatch):
         monkeypatch.setenv("FASTMCP_HOME", str(tmp_path))
-        monkeypatch.setenv("STOLPERSTEIN_HOOK_COOLDOWN_S", "30")
+        monkeypatch.setenv("STOLPERFALLE_HOOK_COOLDOWN_S", "30")
 
     def test_first_call_injects(self, tmp_path, monkeypatch):
         self._fresh_state_dir(tmp_path, monkeypatch)
@@ -265,7 +265,7 @@ class TestRateLimit:
         self._fresh_state_dir(tmp_path, monkeypatch)
         assert self.rl.should_inject("PostToolUse", "ku_" + "a" * 32) is True
         # Set a short cooldown to bypass that check, isolate dedupe
-        monkeypatch.setenv("STOLPERSTEIN_HOOK_COOLDOWN_S", "0")
+        monkeypatch.setenv("STOLPERFALLE_HOOK_COOLDOWN_S", "0")
         self.rl = _import("_rate_limit")
         assert self.rl.should_inject("UserPromptSubmit", "ku_" + "a" * 32) is False
 
@@ -291,14 +291,14 @@ class TestClientTokenSafety:
 
     @pytest.mark.asyncio
     async def test_no_url_returns_none(self, monkeypatch):
-        monkeypatch.delenv("MCP_STOLPERSTEIN_PUBLIC_URL", raising=False)
+        monkeypatch.delenv("MCP_STOLPERFALLE_PUBLIC_URL", raising=False)
         result = await self.client.call_query("traceback: error")
         assert result is None
 
     @pytest.mark.asyncio
     async def test_no_token_returns_none(self, monkeypatch):
-        monkeypatch.setenv("MCP_STOLPERSTEIN_PUBLIC_URL", "http://127.0.0.1:1")
-        monkeypatch.delenv("MCP_STOLPERSTEIN_API_KEY", raising=False)
+        monkeypatch.setenv("MCP_STOLPERFALLE_PUBLIC_URL", "http://127.0.0.1:1")
+        monkeypatch.delenv("MCP_STOLPERFALLE_API_KEY", raising=False)
         result = await self.client.call_query("traceback: error")
         assert result is None
 
@@ -313,14 +313,14 @@ class TestClientReflect:
 
     @pytest.mark.asyncio
     async def test_reflect_no_url_returns_none(self, monkeypatch):
-        monkeypatch.delenv("MCP_STOLPERSTEIN_PUBLIC_URL", raising=False)
+        monkeypatch.delenv("MCP_STOLPERFALLE_PUBLIC_URL", raising=False)
         result = await self.client.call_reflect("summary here")
         assert result is None
 
     @pytest.mark.asyncio
     async def test_reflect_no_token_returns_none(self, monkeypatch):
-        monkeypatch.setenv("MCP_STOLPERSTEIN_PUBLIC_URL", "http://127.0.0.1:1")
-        monkeypatch.delenv("MCP_STOLPERSTEIN_API_KEY", raising=False)
+        monkeypatch.setenv("MCP_STOLPERFALLE_PUBLIC_URL", "http://127.0.0.1:1")
+        monkeypatch.delenv("MCP_STOLPERFALLE_API_KEY", raising=False)
         result = await self.client.call_reflect("summary here")
         assert result is None
 
@@ -328,8 +328,8 @@ class TestClientReflect:
 
     @pytest.mark.asyncio
     async def test_reflect_success_parses_response(self, monkeypatch):
-        monkeypatch.setenv("MCP_STOLPERSTEIN_PUBLIC_URL", "http://127.0.0.1:1")
-        monkeypatch.setenv("MCP_STOLPERSTEIN_API_KEY", "stmcp_test")
+        monkeypatch.setenv("MCP_STOLPERFALLE_PUBLIC_URL", "http://127.0.0.1:1")
+        monkeypatch.setenv("MCP_STOLPERFALLE_API_KEY", "stmcp_test")
 
         captured = {}
 
@@ -354,8 +354,8 @@ class TestClientReflect:
 
     @pytest.mark.asyncio
     async def test_reflect_timeout_raises_sanitized(self, monkeypatch):
-        monkeypatch.setenv("MCP_STOLPERSTEIN_PUBLIC_URL", "http://127.0.0.1:1")
-        monkeypatch.setenv("MCP_STOLPERSTEIN_API_KEY", "stmcp_secret_never_leak")
+        monkeypatch.setenv("MCP_STOLPERFALLE_PUBLIC_URL", "http://127.0.0.1:1")
+        monkeypatch.setenv("MCP_STOLPERFALLE_API_KEY", "stmcp_secret_never_leak")
 
         import time as _time
 
@@ -373,8 +373,8 @@ class TestClientReflect:
 
     @pytest.mark.asyncio
     async def test_reflect_http_error_masks_token(self, monkeypatch):
-        monkeypatch.setenv("MCP_STOLPERSTEIN_PUBLIC_URL", "http://127.0.0.1:1")
-        monkeypatch.setenv("MCP_STOLPERSTEIN_API_KEY", "stmcp_secret_never_leak")
+        monkeypatch.setenv("MCP_STOLPERFALLE_PUBLIC_URL", "http://127.0.0.1:1")
+        monkeypatch.setenv("MCP_STOLPERFALLE_API_KEY", "stmcp_secret_never_leak")
 
         import urllib.error
 
@@ -393,11 +393,11 @@ class TestClientReflect:
         assert msg == "HTTP 401"
 
 class TestHooksDisabledEnv:
-    """The STOLPERSTEIN_HOOKS_DISABLED escape hatch."""
+    """The STOLPERFALLE_HOOKS_DISABLED escape hatch."""
 
     @pytest.mark.asyncio
     async def test_prompt_hook_exits_silently_when_disabled(self, monkeypatch, capsys):
-        monkeypatch.setenv("STOLPERSTEIN_HOOKS_DISABLED", "UserPromptSubmit,PostToolUse")
+        monkeypatch.setenv("STOLPERFALLE_HOOKS_DISABLED", "UserPromptSubmit,PostToolUse")
         mod = _import("on_prompt")
         # Supply a fake JSON input so _run doesn't choke on stdin.
         monkeypatch.setattr("sys.stdin", _StdinStub('{"prompt": "TypeError: x"}'))
@@ -421,8 +421,8 @@ class TestEntryScriptsIntegration:
     @pytest.mark.asyncio
     async def test_on_prompt_conversational_no_op(self, monkeypatch, capsys):
         """Conversational prompts trigger neither query nor injection."""
-        monkeypatch.setenv("MCP_STOLPERSTEIN_PUBLIC_URL", "http://127.0.0.1:1")
-        monkeypatch.setenv("MCP_STOLPERSTEIN_API_KEY", "stmcp_test")
+        monkeypatch.setenv("MCP_STOLPERFALLE_PUBLIC_URL", "http://127.0.0.1:1")
+        monkeypatch.setenv("MCP_STOLPERFALLE_API_KEY", "stmcp_test")
         monkeypatch.setattr("sys.stdin", _StdinStub('{"prompt": "my regex failed"}'))
         mod = _import("on_prompt")
         assert await mod._run() == 0
@@ -431,8 +431,8 @@ class TestEntryScriptsIntegration:
     @pytest.mark.asyncio
     async def test_on_prompt_structured_signal_fires(self, monkeypatch, capsys, tmp_path):
         """Structured signal → query called → injection emitted to stdout."""
-        monkeypatch.setenv("MCP_STOLPERSTEIN_PUBLIC_URL", "http://127.0.0.1:1")
-        monkeypatch.setenv("MCP_STOLPERSTEIN_API_KEY", "stmcp_test")
+        monkeypatch.setenv("MCP_STOLPERFALLE_PUBLIC_URL", "http://127.0.0.1:1")
+        monkeypatch.setenv("MCP_STOLPERFALLE_API_KEY", "stmcp_test")
         monkeypatch.setenv("FASTMCP_HOME", str(tmp_path))
         mod = _import("on_prompt")
 
@@ -458,7 +458,7 @@ class TestEntryScriptsIntegration:
         assert await mod._run() == 0
         out = capsys.readouterr().out
         assert "hookSpecificOutput" in out
-        assert "Note from Stolperstein" in out
+        assert "Note from Stolperfalle" in out
         assert "ku_" + "a" * 32 in out
         # Sanitization didn't corrupt the real content
         assert "Enable strict concurrency flag" in out
@@ -466,8 +466,8 @@ class TestEntryScriptsIntegration:
     @pytest.mark.asyncio
     async def test_on_prompt_strips_crafted_tags(self, monkeypatch, capsys, tmp_path):
         """A malicious KU action with <system-reminder> gets stripped before injection."""
-        monkeypatch.setenv("MCP_STOLPERSTEIN_PUBLIC_URL", "http://127.0.0.1:1")
-        monkeypatch.setenv("MCP_STOLPERSTEIN_API_KEY", "stmcp_test")
+        monkeypatch.setenv("MCP_STOLPERFALLE_PUBLIC_URL", "http://127.0.0.1:1")
+        monkeypatch.setenv("MCP_STOLPERFALLE_API_KEY", "stmcp_test")
         monkeypatch.setenv("FASTMCP_HOME", str(tmp_path))
         mod = _import("on_prompt")
 
@@ -498,8 +498,8 @@ class TestEntryScriptsIntegration:
     @pytest.mark.asyncio
     async def test_on_bash_zero_exit_noop(self, monkeypatch, capsys):
         """Bash call with exit 0 and no error signals in output → no-op."""
-        monkeypatch.setenv("MCP_STOLPERSTEIN_PUBLIC_URL", "http://127.0.0.1:1")
-        monkeypatch.setenv("MCP_STOLPERSTEIN_API_KEY", "stmcp_test")
+        monkeypatch.setenv("MCP_STOLPERFALLE_PUBLIC_URL", "http://127.0.0.1:1")
+        monkeypatch.setenv("MCP_STOLPERFALLE_API_KEY", "stmcp_test")
         mod = _import("on_bash")
         event = '{"tool_name":"Bash","tool_response":{"exitCode":0,"stdout":"Hello","stderr":""}}'
         monkeypatch.setattr("sys.stdin", _StdinStub(event))
@@ -509,8 +509,8 @@ class TestEntryScriptsIntegration:
     @pytest.mark.asyncio
     async def test_on_bash_non_zero_fires(self, monkeypatch, capsys, tmp_path):
         """Non-zero exit → query called → injection emitted."""
-        monkeypatch.setenv("MCP_STOLPERSTEIN_PUBLIC_URL", "http://127.0.0.1:1")
-        monkeypatch.setenv("MCP_STOLPERSTEIN_API_KEY", "stmcp_test")
+        monkeypatch.setenv("MCP_STOLPERFALLE_PUBLIC_URL", "http://127.0.0.1:1")
+        monkeypatch.setenv("MCP_STOLPERFALLE_API_KEY", "stmcp_test")
         monkeypatch.setenv("FASTMCP_HOME", str(tmp_path))
         mod = _import("on_bash")
 
@@ -532,7 +532,7 @@ class TestEntryScriptsIntegration:
         monkeypatch.setattr("sys.stdin", _StdinStub(event))
         assert await mod._run() == 0
         out = capsys.readouterr().out
-        assert "Note from Stolperstein" in out
+        assert "Note from Stolperfalle" in out
         assert "Docker DNS trap" in out
 
     @pytest.mark.parametrize("tool_response", [
@@ -556,8 +556,8 @@ class TestEntryScriptsIntegration:
     async def test_failure_event_echoes_event_name(self, monkeypatch, capsys, tmp_path):
         """PostToolUseFailure events must echo their own hookEventName —
         the harness rejects output claiming the wrong event."""
-        monkeypatch.setenv("MCP_STOLPERSTEIN_PUBLIC_URL", "http://127.0.0.1:1")
-        monkeypatch.setenv("MCP_STOLPERSTEIN_API_KEY", "stmcp_test")
+        monkeypatch.setenv("MCP_STOLPERFALLE_PUBLIC_URL", "http://127.0.0.1:1")
+        monkeypatch.setenv("MCP_STOLPERFALLE_API_KEY", "stmcp_test")
         monkeypatch.setenv("FASTMCP_HOME", str(tmp_path))
         mod = _import("on_bash")
 
@@ -645,7 +645,7 @@ class TestEntryScriptsIntegration:
     def test_on_stop_short_session_no_nudge(self, monkeypatch, tmp_path, capsys):
         """Trivial exploratory sessions (below threshold) print nothing."""
         # Isolate the unreachable marker to this test (previous test runs
-        # may have created /var/folders/.../stolperstein-unreachable-default).
+        # may have created /var/folders/.../stolperfalle-unreachable-default).
         monkeypatch.setenv("CLAUDE_SESSION_ID", "test-short-session-" + str(tmp_path.name))
         transcript = tmp_path / "t.jsonl"
         transcript.write_text("")  # empty transcript
@@ -673,14 +673,14 @@ class TestSessionStartNudge:
         assert "confirm" in hso["additionalContext"]
 
     def test_disabled_via_env_is_silent(self, monkeypatch, capsys):
-        monkeypatch.setenv("STOLPERSTEIN_HOOKS_DISABLED", "SessionStart")
+        monkeypatch.setenv("STOLPERFALLE_HOOKS_DISABLED", "SessionStart")
         mod = _import("on_session_start")
         assert mod.main() == 0
         assert capsys.readouterr().out == ""
 
 
 class TestOnStopReflectViaHook:
-    """Phase 4 opt-in: STOLPERSTEIN_REFLECT_VIA_HOOK routes reflect through /hook/reflect."""
+    """Phase 4 opt-in: STOLPERFALLE_REFLECT_VIA_HOOK routes reflect through /hook/reflect."""
 
     def _make_substantive_transcript(self, tmp_path):
         """Build a JSONL transcript that meets the threshold + substantive bar."""
@@ -704,7 +704,7 @@ class TestOnStopReflectViaHook:
 
     def test_opt_in_calls_reflect_suppresses_nudge(self, monkeypatch, tmp_path, capsys):
         monkeypatch.setenv("CLAUDE_SESSION_ID", "test-opt-in-" + tmp_path.name)
-        monkeypatch.setenv("STOLPERSTEIN_REFLECT_VIA_HOOK", "true")
+        monkeypatch.setenv("STOLPERFALLE_REFLECT_VIA_HOOK", "true")
         transcript = self._make_substantive_transcript(tmp_path)
 
         mod = _import("on_stop")
@@ -726,15 +726,15 @@ class TestOnStopReflectViaHook:
         assert mod.run() == 0
         captured_io = capsys.readouterr()
         # Nudge should NOT be emitted when the hook handles it
-        assert "Run `/stolperstein:reflect`" not in captured_io.out
-        assert "Run `/stolperstein:reflect`" not in captured_io.err
+        assert "Run `/stolperfalle:reflect`" not in captured_io.out
+        assert "Run `/stolperfalle:reflect`" not in captured_io.err
         # Summary was derived and passed
         assert "summary" in captured
         assert "tool-call turns" in captured["summary"]
 
     def test_opt_out_preserves_nudge(self, monkeypatch, tmp_path, capsys):
         monkeypatch.setenv("CLAUDE_SESSION_ID", "test-opt-out-" + tmp_path.name)
-        monkeypatch.delenv("STOLPERSTEIN_REFLECT_VIA_HOOK", raising=False)
+        monkeypatch.delenv("STOLPERFALLE_REFLECT_VIA_HOOK", raising=False)
         transcript = self._make_substantive_transcript(tmp_path)
 
         mod = _import("on_stop")
@@ -747,11 +747,11 @@ class TestOnStopReflectViaHook:
         # Nudge is delivered via the hook JSON systemMessage field — Stop-hook
         # stderr is not shown to the user on exit 0.
         payload = json.loads(out)
-        assert "Run `/stolperstein:reflect`" in payload["systemMessage"]
+        assert "Run `/stolperfalle:reflect`" in payload["systemMessage"]
 
     def test_opt_in_below_threshold_is_silent(self, monkeypatch, tmp_path, capsys):
         monkeypatch.setenv("CLAUDE_SESSION_ID", "test-opt-in-short-" + tmp_path.name)
-        monkeypatch.setenv("STOLPERSTEIN_REFLECT_VIA_HOOK", "true")
+        monkeypatch.setenv("STOLPERFALLE_REFLECT_VIA_HOOK", "true")
         # Only 2 tool turns — below default threshold of 20
         transcript = tmp_path / "t.jsonl"
         transcript.write_text("\n".join([
@@ -783,7 +783,7 @@ class TestOnStopReflectViaHook:
         import tempfile as _tempfile
         session_id = "test-fail-" + tmp_path.name
         monkeypatch.setenv("CLAUDE_SESSION_ID", session_id)
-        monkeypatch.setenv("STOLPERSTEIN_REFLECT_VIA_HOOK", "true")
+        monkeypatch.setenv("STOLPERFALLE_REFLECT_VIA_HOOK", "true")
         transcript = self._make_substantive_transcript(tmp_path)
 
         mod = _import("on_stop")
@@ -795,7 +795,7 @@ class TestOnStopReflectViaHook:
         monkeypatch.setattr(client_mod, "call_reflect", failing_reflect)
 
         # Ensure marker doesn't exist from a prior run
-        marker_path = Path(_tempfile.gettempdir()) / f"stolperstein-unreachable-{session_id}"
+        marker_path = Path(_tempfile.gettempdir()) / f"stolperfalle-unreachable-{session_id}"
         if marker_path.exists():
             marker_path.unlink()
 
@@ -836,7 +836,7 @@ class TestOnStopReflectViaHook:
         ("anything-else", False),
     ])
     def test_reflect_via_hook_env_parsing(self, monkeypatch, val, expected):
-        monkeypatch.setenv("STOLPERSTEIN_REFLECT_VIA_HOOK", val)
+        monkeypatch.setenv("STOLPERFALLE_REFLECT_VIA_HOOK", val)
         mod = _import("on_stop")
         assert mod._reflect_via_hook_enabled() is expected
 

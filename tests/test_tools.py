@@ -109,7 +109,7 @@ async def test_supersede_flow(store):
 @pytest.mark.asyncio
 async def test_reflect_returns_structure():
     """Reflect returns expected structure."""
-    from stolperstein.reflect import reflect_with_dedup
+    from stolperfalle.reflect import reflect_with_dedup
 
     result = await reflect_with_dedup(
         session_summary="Fixed a Swift concurrency issue with Xcode 16"

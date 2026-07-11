@@ -1,6 +1,6 @@
-# Stolperstein extensions to the CQ schema
+# Stolperfalle extensions to the CQ schema
 
-Stolperstein conforms strictly to the upstream `mozilla-ai/cq` schema on the wire (see `tests/fixtures/cq/CQ_SCHEMA_REF.md` for the pin). It also carries **extensions** — fields we need for our use case that upstream doesn't define as core schema. Extensions are stored locally, exposed as first-class fields by `to_cq_json_rich()` and the MCP tool surface, and emitted by `to_cq_json_strict()` inside the upstream **`extensions` slot** under `stolperstein:*` keys.
+Stolperfalle conforms strictly to the upstream `mozilla-ai/cq` schema on the wire (see `tests/fixtures/cq/CQ_SCHEMA_REF.md` for the pin). It also carries **extensions** — fields we need for our use case that upstream doesn't define as core schema. Extensions are stored locally, exposed as first-class fields by `to_cq_json_rich()` and the MCP tool surface, and emitted by `to_cq_json_strict()` inside the upstream **`extensions` slot** under `stolperstein:*` keys.
 
 This document is the canonical registry. Every `stolperstein:*` key emitted on the wire **must** appear here.
 
@@ -14,7 +14,7 @@ The former `additionalProperties: false` blocker is resolved: our scoping issue 
 - **accepted** — upstream has merged the extension; we can unblock by re-vendoring the schema and moving the field out of this registry.
 - **declined** — upstream decided against on the merits (reason noted per row); field stays local-only unless new evidence reopens it.
 - **deferred** — upstream acknowledges the underlying need but wants it resolved in a different shape or thread first.
-- **stolperstein-specific** — never intended for upstream (implementation detail or org-layer concern outside the protocol's scope).
+- **stolperfalle-specific** — never intended for upstream (implementation detail or org-layer concern outside the protocol's scope).
 
 ## Extensions
 
@@ -24,12 +24,12 @@ The former `additionalProperties: false` blocker is resolved: our scoping issue 
 | `evidence.contributing_orgs` | evidence | `array[string]` (DIDs) | declined | Diversity-weighted confidence: 3 orgs confirming > 3 agents from 1 org. Upstream: per-KU org arrays are a profile-building vector when joined across units; diversity should be computed from confirmation provenance instead. |
 | `context.environment` | context | string | deferred | Build/runtime scope (`macos`, `cloudflare-workers`, `node-22`) — observed in practice as platform scope, not just version pins. Upstream: fold into `frameworks` + close the gap with SKILL.md guidance first; revisit via [#170](https://github.com/mozilla-ai/cq/issues/170) if it stays noisy. |
 | `kind` | top-level | `pitfall \| workaround \| tool-recommendation` | declined | Coarse-grained KU typing so agents know the shape before reading. Upstream: classification should be derived from observed usage, not contributor-declared; keeping that path open. |
-| `status` | top-level | `draft \| active \| stale \| disputed \| archived` | stolperstein-specific | Lifecycle state machine. Upstream models lifecycle only via `flags[]` — our richer model is internal. |
-| `staleness_policy` | top-level | string | stolperstein-specific | Per-KU decay policy override. |
-| `related[]` | top-level | `[{type, target_id}]` | stolperstein-specific | Relationship graph beyond `superseded_by`. |
-| `owner_org` | top-level | string (DID) | stolperstein-specific | Multi-tenant read filter via `TRUSTED_ORGS`. Phase 1 foundation — enforceable write permissions in Phase 2. Upstream has `tier: local \| private \| public` instead, which addresses a different slice. |
+| `status` | top-level | `draft \| active \| stale \| disputed \| archived` | stolperfalle-specific | Lifecycle state machine. Upstream models lifecycle only via `flags[]` — our richer model is internal. |
+| `staleness_policy` | top-level | string | stolperfalle-specific | Per-KU decay policy override. |
+| `related[]` | top-level | `[{type, target_id}]` | stolperfalle-specific | Relationship graph beyond `superseded_by`. |
+| `owner_org` | top-level | string (DID) | stolperfalle-specific | Multi-tenant read filter via `TRUSTED_ORGS`. Phase 1 foundation — enforceable write permissions in Phase 2. Upstream has `tier: local \| private \| public` instead, which addresses a different slice. |
 | `provenance.proposer_did` | top-level `provenance` object | string (DID) | deferred | Rich provenance. On the wire, strict mode emits `proposer_did` as upstream's `created_by`. Upstream sets `created_by` server-side; the cross-install attribution-portability question was invited as its own thread. |
-| `provenance.emergent` | top-level `provenance` object | boolean | stolperstein-specific | Distinguishes emergent-aggregation-produced `tool-gap-signal` KUs from grandfathered migration artifacts. |
+| `provenance.emergent` | top-level `provenance` object | boolean | stolperfalle-specific | Distinguishes emergent-aggregation-produced `tool-gap-signal` KUs from grandfathered migration artifacts. |
 
 ## Removed from the live model
 

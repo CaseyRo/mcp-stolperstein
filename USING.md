@@ -1,4 +1,4 @@
-# Using Stolperstein
+# Using Stolperfalle
 
 A practical runbook for day-to-day use with Claude Code. If something isn't clear in 30 seconds, tell me and I'll fix it.
 
@@ -6,15 +6,15 @@ A practical runbook for day-to-day use with Claude Code. If something isn't clea
 
 ## The short version (read this first)
 
-**Stolperstein is shared muscle memory for every Claude Code session you run.** You don't operate it directly — the agent in the session does. What you notice is that Claude gets better at avoiding pitfalls it's never seen in this particular repo before, because it's drawing on a KB captured from every past session across all your projects.
+**Stolperfalle is shared muscle memory for every Claude Code session you run.** You don't operate it directly — the agent in the session does. What you notice is that Claude gets better at avoiding pitfalls it's never seen in this particular repo before, because it's drawing on a KB captured from every past session across all your projects.
 
-**Your only recurring intentional act is `/stolperstein:reflect`** at the end of a substantive session — and even then, the Stop hook reminds you when it matters. Everything else (hooks firing, query / confirm / flag / propose calls) is Claude-driven, not you-driven.
+**Your only recurring intentional act is `/stolperfalle:reflect`** at the end of a substantive session — and even then, the Stop hook reminds you when it matters. Everything else (hooks firing, query / confirm / flag / propose calls) is Claude-driven, not you-driven.
 
 - **Hooks fire in the background, silently.** You don't see them. They inject a one-line hint into Claude's context before Claude reads your next message, so Claude knows about a relevant KU without having to be asked.
 - **Claude calls `query()`, `confirm()`, `flag()` itself.** The `SKILL.md` bundled with the plugin tells it to. You never type these unless you want to override Claude's judgment.
-- **`/stolperstein:reflect` is the one human-in-the-loop step.** You type it, Claude walks you through candidate KUs, you say yes/no, Claude proposes the keepers.
+- **`/stolperfalle:reflect` is the one human-in-the-loop step.** You type it, Claude walks you through candidate KUs, you say yes/no, Claude proposes the keepers.
 
-If you just want to *use* Stolperstein: do the one-time setup below, then forget about it. Run `/stolperstein:reflect` when the Stop hook nudges you (or whenever you felt a session taught you something worth preserving). Done.
+If you just want to *use* Stolperfalle: do the one-time setup below, then forget about it. Run `/stolperfalle:reflect` when the Stop hook nudges you (or whenever you felt a session taught you something worth preserving). Done.
 
 ---
 
@@ -22,19 +22,19 @@ If you just want to *use* Stolperstein: do the one-time setup below, then forget
 
 ### 1. Make sure the server is reachable
 
-Stolperstein hooks need to call the MCP server over HTTP. The production URL is `https://mcp-stolperstein.cdit-dev.de` (Cloudflare Access protected). You need:
+Stolperfalle hooks need to call the MCP server over HTTP. The production URL is `https://mcp-stolperfalle.cdit-dev.de` (Cloudflare Access protected). You need:
 
 ```bash
 # ~/.zshenv or your shell rc
-export MCP_STOLPERSTEIN_PUBLIC_URL="https://mcp-stolperstein.cdit-dev.de"
-export MCP_STOLPERSTEIN_API_KEY="stmcp_…"   # the bearer token from 1Password
+export MCP_STOLPERFALLE_PUBLIC_URL="https://mcp-stolperfalle.cdit-dev.de"
+export MCP_STOLPERFALLE_API_KEY="stmcp_…"   # the bearer token from 1Password
 ```
 
 Confirm it works:
 
 ```bash
-curl -s -H "Authorization: Bearer $MCP_STOLPERSTEIN_API_KEY" \
-  -X POST "$MCP_STOLPERSTEIN_PUBLIC_URL/hook/query" \
+curl -s -H "Authorization: Bearer $MCP_STOLPERFALLE_API_KEY" \
+  -X POST "$MCP_STOLPERFALLE_PUBLIC_URL/hook/query" \
   -d '{"text": "hello", "limit": 1}' | head -c 200
 ```
 
@@ -48,15 +48,15 @@ From this repo:
 cd ~/dev/stolpersteine
 # Register the local marketplace with Claude Code (one-time)
 claude plugins marketplace add ./.claude-plugin/marketplace.json
-claude plugins install stolperstein
+claude plugins install stolperfalle
 ```
 
-This merges `plugin/stolperstein/hooks/hooks.json` into your `.claude/settings.json` so the three hooks fire automatically.
+This merges `plugin/stolperfalle/hooks/hooks.json` into your `.claude/settings.json` so the three hooks fire automatically.
 
 ### 3. Verify the hooks are wired
 
 ```bash
-grep -A 10 '"stolperstein"' ~/.claude/settings.json
+grep -A 10 '"stolperfalle"' ~/.claude/settings.json
 ```
 
 You should see three hook entries: `UserPromptSubmit`, `PostToolUse` (matcher `Bash`), and `Stop`.
@@ -65,18 +65,18 @@ You should see three hook entries: `UserPromptSubmit`, `PostToolUse` (matcher `B
 
 ## Every new project — 30-second check
 
-When you open a project where you expect Stolperstein to help:
+When you open a project where you expect Stolperfalle to help:
 
-1. **Confirm env is loaded** in your shell: `echo $MCP_STOLPERSTEIN_PUBLIC_URL` — should show the URL.
+1. **Confirm env is loaded** in your shell: `echo $MCP_STOLPERFALLE_PUBLIC_URL` — should show the URL.
 2. **Open Claude Code as usual** (`claude` or the desktop app).
 3. **That's it.** Hooks fire automatically on real error signals. No per-project config needed unless you want to tighten patterns (see "Customize per project" below).
 
-If a project uses an unusual error signature Stolperstein doesn't recognize (e.g., `ACME-42` for some internal system), add this to the project's `.claude/settings.json`:
+If a project uses an unusual error signature Stolperfalle doesn't recognize (e.g., `ACME-42` for some internal system), add this to the project's `.claude/settings.json`:
 
 ```json
 {
   "env": {
-    "STOLPERSTEIN_ERROR_PATTERNS": "[\"ACME-\\\\d+\", \"Build failed:\"]"
+    "STOLPERFALLE_ERROR_PATTERNS": "[\"ACME-\\\\d+\", \"Build failed:\"]"
   }
 }
 ```
@@ -89,7 +89,7 @@ If a project uses an unusual error signature Stolperstein doesn't recognize (e.g
 |---|---|---|
 | You paste a stack trace / exception into Claude Code | `UserPromptSubmit` | Looks for a matching KU. If confidence ≥ 0.5, injects a one-line hint before Claude reads your prompt. |
 | A Bash command you run fails with exit code != 0 (or stderr looks like an error) | `PostToolUse` (Bash) | Same query, hint lands in Claude's next turn. Never delays the command output. |
-| Session ends after ≥ 20 tool turns *and* at least one failing bash OR one `confirm`/`flag` call | `Stop` | Prints a single nudge: "Run `/stolperstein:reflect`..." |
+| Session ends after ≥ 20 tool turns *and* at least one failing bash OR one `confirm`/`flag` call | `Stop` | Prints a single nudge: "Run `/stolperfalle:reflect`..." |
 | Session ends short / exploratory | `Stop` | Silent — no nudge. |
 
 **You don't call anything.** Hooks handle query-on-error for you. The channels are rate-limited: 30s cooldown per hook type, 5min per-KU dedupe. If the same KU would fire twice in a row, the second is suppressed.
@@ -101,7 +101,7 @@ If a project uses an unusual error signature Stolperstein doesn't recognize (e.g
 Claude will call `query` / `confirm` / `flag` on its own when it decides they're useful. You only need to step in when you want to override that judgment. Examples of things you might say to Claude:
 
 - **Force a lookup before Claude assumes it knows:**
-  > Before you touch the Xcode project, check Stolperstein for Swift concurrency traps.
+  > Before you touch the Xcode project, check Stolperfalle for Swift concurrency traps.
 
   Claude calls `query(...)` even though no hook triggered.
 
@@ -111,12 +111,12 @@ Claude will call `query` / `confirm` / `flag` on its own when it decides they're
   Claude calls `confirm(...)`.
 
 - **Tell Claude a hint was bad:**
-  > That Stolperstein suggestion was wrong, the workaround doesn't apply anymore — flag it as incorrect.
+  > That Stolperfalle suggestion was wrong, the workaround doesn't apply anymore — flag it as incorrect.
 
   Claude calls `flag(...)`.
 
 - **Inspect the KB:**
-  > Show me Stolperstein status with debug info.
+  > Show me Stolperfalle status with debug info.
 
   Claude calls `status(debug=True)`.
 
@@ -124,12 +124,12 @@ You're always in "talking to Claude" mode, never "running tools directly" mode.
 
 ---
 
-## End of session — /stolperstein:reflect (the ONE thing you trigger)
+## End of session — /stolperfalle:reflect (the ONE thing you trigger)
 
 The Stop hook will nudge you when a session was substantive. If you want to capture what you learned (or you want to capture something even on a short session), type:
 
 ```
-/stolperstein:reflect
+/stolperfalle:reflect
 ```
 
 What happens — **Claude does all of it, you just approve**:
@@ -178,10 +178,10 @@ Add to a project's `.claude/settings.json`:
 ```json
 {
   "env": {
-    "STOLPERSTEIN_HOOKS_DISABLED": "UserPromptSubmit",
-    "STOLPERSTEIN_REFLECT_THRESHOLD": "30",
-    "STOLPERSTEIN_HOOK_COOLDOWN_S": "60",
-    "STOLPERSTEIN_ERROR_PATTERNS": "[\"MySpecificError:\", \"ACME-\\\\d+\"]"
+    "STOLPERFALLE_HOOKS_DISABLED": "UserPromptSubmit",
+    "STOLPERFALLE_REFLECT_THRESHOLD": "30",
+    "STOLPERFALLE_HOOK_COOLDOWN_S": "60",
+    "STOLPERFALLE_ERROR_PATTERNS": "[\"MySpecificError:\", \"ACME-\\\\d+\"]"
   }
 }
 ```
@@ -194,22 +194,22 @@ All optional. Leave empty to use global defaults.
 
 | Symptom | Check |
 |---|---|
-| Hooks never fire | `echo $MCP_STOLPERSTEIN_PUBLIC_URL $MCP_STOLPERSTEIN_API_KEY` — both set? |
-| "Stolperstein was unreachable during this session" at session end | Server / Cloudflare Access auth issue. Confirm with the `curl` test above. |
+| Hooks never fire | `echo $MCP_STOLPERFALLE_PUBLIC_URL $MCP_STOLPERFALLE_API_KEY` — both set? |
+| "Stolperfalle was unreachable during this session" at session end | Server / Cloudflare Access auth issue. Confirm with the `curl` test above. |
 | Wrong hint injected after an error | Flag the KU: `flag(ku_id="…", reason="incorrect", detail="…")`. Stays in dedupe window for 5min so you won't see it again immediately. |
-| Hints are too noisy | Raise the threshold: `STOLPERSTEIN_HOOK_COOLDOWN_S=120`. Or disable a hook: `STOLPERSTEIN_HOOKS_DISABLED=UserPromptSubmit`. |
-| Nudge at `Stop` is too frequent | Raise threshold: `STOLPERSTEIN_REFLECT_THRESHOLD=30` (default 20). |
-| Need to disable everything temporarily | `STOLPERSTEIN_HOOKS_DISABLED=UserPromptSubmit,PostToolUse,Stop` |
-| Need to see what's in the store | In Claude Code: "Call status(debug=True) on Stolperstein." |
+| Hints are too noisy | Raise the threshold: `STOLPERFALLE_HOOK_COOLDOWN_S=120`. Or disable a hook: `STOLPERFALLE_HOOKS_DISABLED=UserPromptSubmit`. |
+| Nudge at `Stop` is too frequent | Raise threshold: `STOLPERFALLE_REFLECT_THRESHOLD=30` (default 20). |
+| Need to disable everything temporarily | `STOLPERFALLE_HOOKS_DISABLED=UserPromptSubmit,PostToolUse,Stop` |
+| Need to see what's in the store | In Claude Code: "Call status(debug=True) on Stolperfalle." |
 
 ---
 
 ## For the curious: where the data lives
 
-- **KU data + public key + DID**: `/data/stolperstein.db` (in the Komodo-managed Docker volume `stolperstein-data`).
+- **KU data + public key + DID**: `/data/stolperstein.db` (in the Komodo-managed Docker volume `stolperstein-data`). Filenames/volume name intentionally unchanged by the product rename.
 - **Private signing key**: `/data/stolperstein.key` (mode 0o600). **Treat as sensitive.** Excluded from volume backups.
 - **OAuth client cache (FastMCP)**: `/data/fastmcp/`.
-- **Pre-migration backups**: `/data/stolperstein.db.bak-pre-v<N>` — created automatically on breaking schema changes, preserved until you run `mcp-stolperstein prune-backups --confirm`.
+- **Pre-migration backups**: `/data/stolperstein.db.bak-pre-v<N>` — created automatically on breaking schema changes, preserved until you run `mcp-stolperfalle prune-backups --confirm`.
 
 ---
 

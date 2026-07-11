@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from stolperstein.auth import (
+from stolperfalle.auth import (
     BearerTokenVerifier,
     create_bearer_only_auth,
     generate_api_key,
@@ -17,7 +17,7 @@ async def test_bearer_valid_token():
     verifier = BearerTokenVerifier("stmcp_test_key_123")
     result = await verifier.verify_token("stmcp_test_key_123")
     assert result is not None
-    assert result.client_id == "mcp-stolperstein-client"
+    assert result.client_id == "mcp-stolperfalle-client"
     assert "all" in result.scopes
 
 

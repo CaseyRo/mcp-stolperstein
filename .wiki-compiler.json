@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "name": "mcp-stolperstein",
+  "name": "mcp-stolperfalle",
   "sources": [
     { "path": "openspec/", "exclude": ["wiki/"] },
     { "path": "docs/", "exclude": ["wiki/"] },

@@ -7,8 +7,8 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from stolperstein.models import KUKind, ReflectCandidate
-from stolperstein.reflect import (
+from stolperfalle.models import KUKind, ReflectCandidate
+from stolperfalle.reflect import (
     _classify_kind,
     _extract_action,
     _extract_domains,
@@ -202,7 +202,7 @@ class TestLLMExtraction:
     async def test_llm_not_configured_returns_none(self, monkeypatch):
         monkeypatch.setenv("CQ_LLM_API_URL", "")
         # Re-import to pick up env change
-        from stolperstein.reflect import _llm_extract
+        from stolperfalle.reflect import _llm_extract
         result = await _llm_extract("test session")
         assert result is None
 
@@ -225,16 +225,16 @@ class TestLLMExtraction:
 
         # Patch settings directly on the reflect module's import
         monkeypatch.setattr(
-            "stolperstein.config.settings.cq_llm_api_url",
+            "stolperfalle.config.settings.cq_llm_api_url",
             "http://fake-llm:8080/v1",
         )
         from pydantic import SecretStr
         monkeypatch.setattr(
-            "stolperstein.config.settings.cq_llm_api_key",
+            "stolperfalle.config.settings.cq_llm_api_key",
             SecretStr("test-key"),
         )
         monkeypatch.setattr(
-            "stolperstein.config.settings.cq_llm_model",
+            "stolperfalle.config.settings.cq_llm_model",
             "test-model",
         )
 
@@ -253,7 +253,7 @@ class TestLLMExtraction:
             mock_instance.__aexit__ = AsyncMock(return_value=None)
             mock_client.return_value = mock_instance
 
-            from stolperstein.reflect import _llm_extract
+            from stolperfalle.reflect import _llm_extract
             result = await _llm_extract("test session about webhooks")
 
         assert result is not None

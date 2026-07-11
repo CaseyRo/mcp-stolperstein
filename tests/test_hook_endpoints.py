@@ -1,4 +1,4 @@
-"""Tests for the /hook/* REST endpoints on the stolperstein MCP server.
+"""Tests for the /hook/* REST endpoints on the stolperfalle MCP server.
 
 These exercise the handler functions directly with a mock request to avoid
 bringing up a full starlette app. The handlers themselves hold all the auth,
@@ -43,10 +43,10 @@ def http_settings(monkeypatch):
     from pydantic import SecretStr
 
     monkeypatch.setenv("TRANSPORT", "http")
-    monkeypatch.setenv("MCP_STOLPERSTEIN_API_KEY", "stmcp_test_key")
-    from stolperstein.config import settings as cfg
+    monkeypatch.setenv("MCP_STOLPERFALLE_API_KEY", "stmcp_test_key")
+    from stolperfalle.config import settings as cfg
     monkeypatch.setattr(cfg, "transport", "http")
-    monkeypatch.setattr(cfg, "mcp_stolperstein_api_key", SecretStr("stmcp_test_key"))
+    monkeypatch.setattr(cfg, "mcp_stolperfalle_api_key", SecretStr("stmcp_test_key"))
     return cfg
 
 
@@ -56,14 +56,14 @@ def http_settings(monkeypatch):
 class TestHookReflectAuth:
     @pytest.mark.asyncio
     async def test_missing_bearer_returns_401(self, http_settings):
-        from stolperstein.server import hook_reflect
+        from stolperfalle.server import hook_reflect
         resp = await hook_reflect(_MockRequest(headers={}))
         assert resp.status_code == 401
         assert (await _body(resp))["error"] == "bearer token required"
 
     @pytest.mark.asyncio
     async def test_wrong_bearer_returns_401(self, http_settings):
-        from stolperstein.server import hook_reflect
+        from stolperfalle.server import hook_reflect
         resp = await hook_reflect(
             _MockRequest(headers={"authorization": "Bearer wrong"})
         )
@@ -74,7 +74,7 @@ class TestHookReflectAuth:
 class TestHookReflectValidation:
     @pytest.mark.asyncio
     async def test_malformed_json_returns_400(self, http_settings):
-        from stolperstein.server import hook_reflect
+        from stolperfalle.server import hook_reflect
         resp = await hook_reflect(
             _MockRequest(headers=_auth_headers(), body="not-json")
         )
@@ -83,7 +83,7 @@ class TestHookReflectValidation:
 
     @pytest.mark.asyncio
     async def test_non_object_body_returns_400(self, http_settings):
-        from stolperstein.server import hook_reflect
+        from stolperfalle.server import hook_reflect
         resp = await hook_reflect(
             _MockRequest(headers=_auth_headers(), body=["array", "not", "object"])
         )
@@ -92,7 +92,7 @@ class TestHookReflectValidation:
 
     @pytest.mark.asyncio
     async def test_missing_session_summary_returns_400(self, http_settings):
-        from stolperstein.server import hook_reflect
+        from stolperfalle.server import hook_reflect
         resp = await hook_reflect(
             _MockRequest(headers=_auth_headers(), body={})
         )
@@ -103,7 +103,7 @@ class TestHookReflectValidation:
 
     @pytest.mark.asyncio
     async def test_empty_session_summary_returns_400(self, http_settings):
-        from stolperstein.server import hook_reflect
+        from stolperfalle.server import hook_reflect
         resp = await hook_reflect(
             _MockRequest(headers=_auth_headers(), body={"session_summary": "   "})
         )
@@ -119,10 +119,10 @@ class TestHookReflectSuccess:
             assert summary == "real summary"
             return fake_result
 
-        import stolperstein.reflect as reflect_mod
+        import stolperfalle.reflect as reflect_mod
         monkeypatch.setattr(reflect_mod, "reflect_with_dedup", fake_reflect)
 
-        from stolperstein.server import hook_reflect
+        from stolperfalle.server import hook_reflect
         resp = await hook_reflect(
             _MockRequest(
                 headers=_auth_headers(),
@@ -137,10 +137,10 @@ class TestHookReflectSuccess:
         async def fake_reflect(summary, *, store):
             raise RuntimeError("sensitive-looking internal detail")
 
-        import stolperstein.reflect as reflect_mod
+        import stolperfalle.reflect as reflect_mod
         monkeypatch.setattr(reflect_mod, "reflect_with_dedup", fake_reflect)
 
-        from stolperstein.server import hook_reflect
+        from stolperfalle.server import hook_reflect
         resp = await hook_reflect(
             _MockRequest(
                 headers=_auth_headers(),
@@ -163,7 +163,7 @@ class TestHookQueryRegression:
 
     @pytest.mark.asyncio
     async def test_missing_text_returns_400(self, http_settings):
-        from stolperstein.server import hook_query
+        from stolperfalle.server import hook_query
         resp = await hook_query(
             _MockRequest(headers=_auth_headers(), body={})
         )
@@ -172,7 +172,7 @@ class TestHookQueryRegression:
 
     @pytest.mark.asyncio
     async def test_wrong_bearer_still_401(self, http_settings):
-        from stolperstein.server import hook_query
+        from stolperfalle.server import hook_query
         resp = await hook_query(
             _MockRequest(headers={"authorization": "Bearer nope"})
         )
@@ -183,10 +183,10 @@ class TestHookQueryRegression:
         async def fake_query(*, text, domain, confidence_min, limit):
             return {"results": [{"stub": text}], "count": 1}
 
-        import stolperstein.store as store_mod
+        import stolperfalle.store as store_mod
         monkeypatch.setattr(store_mod.store, "query", fake_query)
 
-        from stolperstein.server import hook_query
+        from stolperfalle.server import hook_query
         resp = await hook_query(
             _MockRequest(
                 headers=_auth_headers(),
@@ -205,11 +205,11 @@ class TestTransportGuard:
 
     @pytest.mark.asyncio
     async def test_stdio_transport_returns_503(self, monkeypatch):
-        from stolperstein.config import settings as cfg
+        from stolperfalle.config import settings as cfg
         monkeypatch.setattr(cfg, "transport", "stdio")
-        monkeypatch.setattr(cfg, "mcp_stolperstein_api_key", "stmcp_test_key")
+        monkeypatch.setattr(cfg, "mcp_stolperfalle_api_key", "stmcp_test_key")
 
-        from stolperstein.server import hook_reflect, hook_query
+        from stolperfalle.server import hook_reflect, hook_query
         for handler in (hook_query, hook_reflect):
             resp = await handler(_MockRequest(headers=_auth_headers()))
             assert resp.status_code == 503

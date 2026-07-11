@@ -1,5 +1,5 @@
 services:
-  mcp-stolperstein:
+  mcp-stolperfalle:
     build: .
     restart: unless-stopped
     # Runtime hardening: non-root already (USER mcp in the image); block
@@ -15,13 +15,16 @@ services:
       - TRANSPORT=http
       - HOST=0.0.0.0
       - PORT=8716
+      # DB/key filenames intentionally NOT renamed with the product — see
+      # config.py / provenance.py comments: renaming these would make a
+      # redeploy silently create a fresh DB / rotate the signing key.
       - CQ_LOCAL_DB_PATH=/data/stolperstein.db
-      - MCP_STOLPERSTEIN_API_KEY=${MCP_STOLPERSTEIN_API_KEY:-}
-      - MCP_STOLPERSTEIN_PUBLIC_URL=${MCP_STOLPERSTEIN_PUBLIC_URL:-https://mcp-stolperstein.cdit-dev.de}
+      - MCP_STOLPERFALLE_API_KEY=${MCP_STOLPERFALLE_API_KEY:-}
+      - MCP_STOLPERFALLE_PUBLIC_URL=${MCP_STOLPERFALLE_PUBLIC_URL:-https://mcp-stolperfalle.cdit-dev.de}
       # Recovery path: if /data/stolperstein.key is ever lost, set this (base64
       # of the 32-byte key) in Komodo env and it wins over the file. Defaults
       # empty -> normal boot loads the key from the volume.
-      - MCP_STOLPERSTEIN_SIGNING_KEY=${MCP_STOLPERSTEIN_SIGNING_KEY:-}
+      - MCP_STOLPERFALLE_SIGNING_KEY=${MCP_STOLPERFALLE_SIGNING_KEY:-}
       - CF_ACCESS_TEAM=${CF_ACCESS_TEAM:-cdit-dev}
       - CF_ACCESS_CLIENT_ID=${CF_ACCESS_CLIENT_ID}
       - CF_ACCESS_CLIENT_SECRET=${CF_ACCESS_CLIENT_SECRET}

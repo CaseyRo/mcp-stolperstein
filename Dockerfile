@@ -25,7 +25,7 @@ WORKDIR /app
 
 # Copy installed packages and model cache from builder
 COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
-COPY --from=builder /usr/local/bin/mcp-stolperstein /usr/local/bin/mcp-stolperstein
+COPY --from=builder /usr/local/bin/mcp-stolperfalle /usr/local/bin/mcp-stolperfalle
 COPY --from=builder /root/.cache/huggingface /root/.cache/huggingface
 COPY --from=builder /app/src ./src
 
@@ -58,7 +58,7 @@ EXPOSE 8716
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
   CMD python3 -c "import urllib.request,sys; \
 req=urllib.request.Request('http://localhost:8716/health', \
-headers={'Host':'mcp-stolperstein.cdit-dev.de'}); \
+headers={'Host':'mcp-stolperfalle.cdit-dev.de'}); \
 urllib.request.urlopen(req, timeout=3); sys.exit(0)"
 
-CMD ["mcp-stolperstein"]
+CMD ["mcp-stolperfalle"]

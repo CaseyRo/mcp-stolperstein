@@ -887,7 +887,7 @@ wheels = [
 ]
 
 [[package]]
-name = "mcp-stolperstein"
+name = "mcp-stolperfalle"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [

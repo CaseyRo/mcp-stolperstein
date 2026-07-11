@@ -9,7 +9,7 @@ status: active
 
 ## Pattern
 
-Stolperstein is deliberately positioned as a **conforming-plus-extending reference implementation** of Mozilla AI's `mozilla-ai/cq`, not a fork. The same move recurs at every layer: emit a wire shape that validates *exactly* against the vendored, pinned upstream schema (`to_cq_json_strict()`), while carrying a richer internal superset (`to_cq_json_rich()`) whose extra fields ride the upstream `extensions` slot as namespaced `stolperstein:*` keys. Extensions that prove useful get proposed back upstream so the protocol grows rather than diverges. The load-bearing invariant is that an extension must **never** leak into a strict core field — it lives in the slot, and every `stolperstein:*` key is registered in `docs/cq-extensions.md`.
+Stolperfalle is deliberately positioned as a **conforming-plus-extending reference implementation** of Mozilla AI's `mozilla-ai/cq`, not a fork. The same move recurs at every layer: emit a wire shape that validates *exactly* against the vendored, pinned upstream schema (`to_cq_json_strict()`), while carrying a richer internal superset (`to_cq_json_rich()`) whose extra fields ride the upstream `extensions` slot as namespaced `stolperstein:*` keys. Extensions that prove useful get proposed back upstream so the protocol grows rather than diverges. The load-bearing invariant is that an extension must **never** leak into a strict core field — it lives in the slot, and every `stolperstein:*` key is registered in `docs/cq-extensions.md`.
 
 ## Instances
 
@@ -21,7 +21,7 @@ Stolperstein is deliberately positioned as a **conforming-plus-extending referen
 
 ## What This Means
 
-The strategy lets Stolperstein be interoperable **and** ahead of upstream at the same time — a reference implementation whose extensions are the growth path for the protocol itself. The risk it exists to manage is drift: any consumer that validates output against the pinned schema will reject a non-conforming payload, so the strict serializer is a hard contract, not a convenience. The discipline — two explicit serializers, the extensions registry, the pinned vendored schema in tests — is what keeps "extend freely" from quietly becoming "no longer CQ."
+The strategy lets Stolperfalle be interoperable **and** ahead of upstream at the same time — a reference implementation whose extensions are the growth path for the protocol itself. The risk it exists to manage is drift: any consumer that validates output against the pinned schema will reject a non-conforming payload, so the strict serializer is a hard contract, not a convenience. The discipline — two explicit serializers, the extensions registry, the pinned vendored schema in tests — is what keeps "extend freely" from quietly becoming "no longer CQ."
 
 ## Sources
 

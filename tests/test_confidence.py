@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from stolperstein.confidence import calculate_confidence
+from stolperfalle.confidence import calculate_confidence
 
 
 # --- Property-based tests ---

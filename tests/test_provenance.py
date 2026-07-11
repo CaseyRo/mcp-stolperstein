@@ -5,7 +5,7 @@ from __future__ import annotations
 import base64
 import sqlite3
 
-from stolperstein.provenance import (
+from stolperfalle.provenance import (
     ENV_KEY,
     derive_did_from_pubkey,
     generate_did_key,
@@ -32,7 +32,7 @@ def test_did_format():
 
 
 def test_env_var_overrides_file(tmp_path, monkeypatch):
-    """If MCP_STOLPERSTEIN_SIGNING_KEY is set, the file is ignored."""
+    """If MCP_STOLPERFALLE_SIGNING_KEY is set, the file is ignored."""
     key_path = tmp_path / "ignored.key"
     key_path.write_bytes(b"\xff" * 32)
     monkeypatch.setenv(ENV_KEY, base64.b64encode(b"\x00" * 32).decode())
@@ -43,7 +43,7 @@ def test_env_var_overrides_file(tmp_path, monkeypatch):
 
 def test_signing_key_file_is_mode_0o600(tmp_path):
     """write_signing_key_file enforces chmod 0o600."""
-    key_path = tmp_path / "stolperstein.key"
+    key_path = tmp_path / "stolperfalle.key"
     write_signing_key_file(str(key_path), b"\x01" * 32)
     assert key_path.exists()
     mode = key_path.stat().st_mode & 0o777

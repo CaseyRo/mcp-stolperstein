@@ -7,8 +7,8 @@ TBD - created by archiving change adopt-cq-extensions-slot. Update Purpose after
 
 All Knowledge Units emitted to any external CQ consumer SHALL conform exactly to `mozilla-ai/cq` upstream `schema/knowledge_unit.json` as vendored at a pinned SHA in `tests/fixtures/cq/`. The vendored pin SHALL be a post-[#453](https://github.com/mozilla-ai/cq/pull/453) revision that defines the optional top-level `extensions` object (namespaced keys matching `^[a-z0-9][a-z0-9_-]*:\S+$`). The system SHALL provide two serializers:
 
-- `to_cq_json_strict()`: emits the upstream-valid shape. Stolperstein extension fields SHALL be emitted inside the `extensions` slot under `stolperstein:*` keys — no longer stripped. Used for external validation and any interop path.
-- `to_cq_json_rich()`: emits the internal superset with all Stolperstein extensions as first-class fields. Used for local dumps, debugging, and extension-aware consumers. Unchanged by this delta.
+- `to_cq_json_strict()`: emits the upstream-valid shape. Stolperfalle extension fields SHALL be emitted inside the `extensions` slot under `stolperstein:*` keys — no longer stripped. Used for external validation and any interop path.
+- `to_cq_json_rich()`: emits the internal superset with all Stolperfalle extensions as first-class fields. Used for local dumps, debugging, and extension-aware consumers. Unchanged by this delta.
 
 Strict-mode core field mapping (unchanged):
 
@@ -45,7 +45,7 @@ The `extensions` object SHALL be omitted entirely when no extension value is pre
 #### Scenario: Extensions never appear as top-level or nested extra properties
 
 - **WHEN** `to_cq_json_strict()` output is inspected outside the `extensions` object
-- **THEN** no Stolperstein extension field (`severity`, `kind`, `status`, `owner_org`, `staleness_policy`, `related`, `environment`, `contributing_orgs`, `emergent`) SHALL appear at top level or inside `context`/`evidence`/`provenance` sub-objects
+- **THEN** no Stolperfalle extension field (`severity`, `kind`, `status`, `owner_org`, `staleness_policy`, `related`, `environment`, `contributing_orgs`, `emergent`) SHALL appear at top level or inside `context`/`evidence`/`provenance` sub-objects
 
 #### Scenario: Extension-free KU omits the slot
 

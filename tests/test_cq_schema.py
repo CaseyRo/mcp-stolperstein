@@ -3,7 +3,7 @@
 Validates two serializer surfaces:
 
 1. `to_cq_json_strict()` — must validate against the vendored upstream
-   `knowledge_unit.json` schema (no Stolperstein extensions).
+   `knowledge_unit.json` schema (no Stolperfalle extensions).
 2. `to_cq_json_rich()` — carries extensions; does NOT validate against
    upstream strict, by design.
 """
@@ -17,7 +17,7 @@ from pathlib import Path
 import jsonschema
 import pytest
 
-from stolperstein.models import (
+from stolperfalle.models import (
     Context,
     Evidence,
     Insight,
@@ -89,7 +89,7 @@ def test_strict_serializer_validates_against_upstream_schema():
 
 
 def test_rich_serializer_carries_all_extensions():
-    """to_cq_json_rich() includes every Stolperstein extension."""
+    """to_cq_json_rich() includes every Stolperfalle extension."""
     ku = _make_ku()
     rich = ku.to_cq_json_rich()
     assert rich["kind"] == "pitfall"

@@ -28,14 +28,16 @@ Also done, not originally itemized: updated `komodo.toml` (stack name, repo path
 - [x] 3.3 Confirm CI passes on the PR — `test` + `security` both green on PR #35
 - [ ] 3.4 Merge — **MOVED to the final step**, after the Komodo cutover + repo rename (also: PR #34 touches README.md too and will conflict; whichever merges second rebases)
 
-## 4. Deploy
+## 4. Deploy — DONE 2026-07-11 (via update-in-place, not new-stack; see note)
 
-- [x] 4.1 Snapshot pre-rename state: record the current `proposer_did` and KU `total` via `status(debug=True)` against the live (old-named) server — done 2026-07-11: `proposer_did=did:key:z6MknmCWEfBfraxGGpwiQ1rS8paUwsh9Z4UmdCSne9x8rxVL`, KU `total=119` (active 3 / archived 1 / draft 115). Also corrected: there is no separate `stolperstein-key` volume (see 4.2 note) — only `stolperstein-data` (holds both `stolperstein.db` and `stolperstein.key`) and `fastmcp-data`, confirmed via `docker volume inspect` on nebula-1.
-- [ ] 4.2 Create the new Komodo stack config pointed at the renamed repo; mount the **existing** `stolperstein-data` volume (contains both the DB and the signing key — there is no separate `stolperstein-key` volume, that was a doc error) — do not let Komodo provision fresh ones. **Mechanism**: set the new stack's `project_name` config field to the old stack's name (`git-mcp-stolperstein-nebula`) so Compose resolves to the same already-existing volumes with zero compose.yaml edits; alternative is `external: true` + explicit `name:` in compose.yaml.
-- [ ] 4.3 Copy (not regenerate) every env var **value** into the new `STOLPERFALLE_*`/`MCP_STOLPERFALLE_*` var names in the Komodo stack config — reuse the same underlying Komodo secret variables under the new key names (e.g. `MCP_STOLPERFALLE_API_KEY=[[MCP_STOLPERSTEIN_API_KEY]]`) so no secret value is ever resolved/rotated. Also: the branch's checked-in `komodo.toml` has drifted from the live env block (placeholder `CQ_SIYUAN_URL`, missing `CQ_LLM_*`/`CQ_EMBEDDING_MODEL`, a `MCP_STOLPERFALLE_PUBLIC_URL` pointed at a domain with no DNS/tunnel yet) — don't apply it literally, use the live stack's actual `environment` field (via Komodo API `GetStack`) as source of truth. Live stack's `repo` config field is also stale (`CaseyRo/stolpersteine`, pre-existing drift unrelated to this rename) — use the real current name `CaseyRo/mcp-stolperstein` on the new stack.
-- [ ] 4.4 Deploy the new stack
-- [ ] 4.5 Verify: `status(debug=True)` on the new deployment shows the **same** `proposer_did` and KU `total` as the 4.1 snapshot (data + DID continuity gate)
-- [ ] 4.6 Verify container health and a live tool-call round-trip under the new tool names
+**APPROACH CHANGE:** executed as an **update-in-place** of the existing stack `git-mcp-stolperstein-nebula` rather than a parallel new stack. Rationale: same stack resource → same compose project → the existing `stolperstein-data`/`fastmcp-data` volumes are reused *automatically* (no `project_name` pinning trick, no two-resources-one-project hazard), only 3 config fields change, and it neutralizes the merge-trap (stack now builds from the branch, so a later `main` merge won't auto-redeploy). The auto-mode permission system blocked the agent from executing the production writes directly; the operator ran the prepped scratchpad scripts via `!` under direct authorization.
+
+- [x] 4.1 Snapshot baseline: `proposer_did=did:key:z6MknmCWEfBfraxGGpwiQ1rS8paUwsh9Z4UmdCSne9x8rxVL`, KU `total=119`. Corrected: no separate `stolperstein-key` volume — only `stolperstein-data` (holds both `stolperstein.db` + `stolperstein.key`) and `fastmcp-data`.
+- [x] 4.2 (as update-in-place) Updated the live stack config via raw Komodo API (repo `CaseyRo/stolpersteine`→`CaseyRo/mcp-stolperstein`, branch `main`→`rename-to-stolperfalle`, env block), read-back-verified before deploy. Same resource → existing volumes reused automatically.
+- [x] 4.3 Env: renamed only `MCP_STOLPERSTEIN_API_KEY`→`MCP_STOLPERFALLE_API_KEY` reusing the same `[[MCP_STOLPERSTEIN_API_KEY]]` secret ref (no rotation); everything else (`CQ_*`) identical to the live env block; used raw API to preserve newlines (km update stack's query-string form collapses them). Public URL comes from the renamed compose default.
+- [x] 4.4 Deployed. Note: Komodo's `compose up` built + created the new `mcp-stolperfalle` container but couldn't start it (port 8716 held by the still-running old service — service rename meant compose didn't auto-stop the old one). Completed the handoff manually (stop old → the new container then had a stuck host-port binding from the failed first start → `docker rm` + `docker compose up -d --remove-orphans` in `/etc/komodo/stacks/git-mcp-stolperstein-nebula` recreated it cleanly with the port bound and removed the old orphan).
+- [x] 4.5 Continuity gate PASSED: new deployment shows the same `proposer_did` and KU `total=119`. Same volume, DB, and signing key.
+- [x] 4.6 Verified: container healthy, host `:8716` + external `mcp-stolperstein.cdit-dev.de/health` → 200, AND a live `stolperstein_status` MCP call through the full Portal→CF→tunnel path returned 119 KUs (API key carried over, tools still resolve).
 
 ## 5. Cloudflare / DNS cutover
 
@@ -51,9 +53,11 @@ Also done, not originally itemized: updated `komodo.toml` (stack name, repo path
 
 ## 7. Decommission (after a soak period)
 
-- [ ] 7.1 Confirm no errors/traffic on the old subdomain for the agreed soak window
-- [ ] 7.2 Remove the old Cloudflare Access entry + DNS record
-- [ ] 7.3 Remove the old Komodo stack (`git-mcp-stolperstein-nebula`)
+**Mostly moot under update-in-place:** there is no separate "old stack" to remove — `git-mcp-stolperstein-nebula` is the same resource, now running the `mcp-stolperfalle` container. The old orphan container was already removed by `compose --remove-orphans` during 4.4. The old subdomain `mcp-stolperstein.cdit-dev.de` is currently the *working* domain (serving the new container), so it is NOT decommissioned — it's kept.
+
+- [x] 7.1 Old orphan container removed during the deploy handoff (4.4).
+- [ ] 7.2 (optional/deferred) Rename the Komodo stack *resource* `git-mcp-stolperstein-nebula` → `git-mcp-stolperfalle-nebula` for naming consistency — cosmetic, internal-only, fiddly; leave unless it bothers you.
+- [ ] 7.3 (optional/deferred) Once the new `mcp-stolperfalle.cdit-dev.de` domain is live (task 5) and soaked, decide whether to retire the old `mcp-stolperstein.cdit-dev.de` alias or keep it as a permanent redirect.
 
 ## 8. Fleet documentation sync
 

@@ -2,6 +2,8 @@
 
 Experiential knowledge capture and recall MCP server for AI coding agents. A conforming-plus-extending implementation of Mozilla AI's [cq](https://github.com/mozilla-ai/cq) — Phase 1 of the machine-readable org layer we're building at [CDiT](https://cdit-works.de).
 
+> **Renamed 2026-07-11 (was `mcp-stolperstein`).** *Stolpersteine* are [Gunter Demnig's brass Holocaust memorial stones](https://en.wikipedia.org/wiki/Stolperstein) set into German pavements; using that name for a casual dev tool risked trivializing the memorial, so the project was renamed to **Stolperfalle** (an ordinary German word for a trip hazard — same *stolpern* "stumble" root, none of the weight). Rationale and rollout: [`openspec/changes/rename-product-name`](openspec/changes/rename-product-name/proposal.md). The old GitHub URL auto-redirects. One deliberate exception: the wire-protocol extension namespace `stolperstein:*` is unchanged — it is baked into merged upstream [mozilla-ai/cq#453](https://github.com/mozilla-ai/cq/pull/453) and is decoupled from the product name.
+
 ## Quick start
 
 ```bash

@@ -1,5 +1,5 @@
 [[stack]]
-name = "git-mcp-stolperfalle-nebula"
+name = "git-mcp-stolperstein-nebula"
 description = "Stolperfalle — Experiential knowledge capture MCP server"
 deploy = true
 tags = ["mcp"]

@@ -74,3 +74,5 @@ Hooks require the MCP server reachable over HTTP; set `MCP_STOLPERFALLE_PUBLIC_U
 ## License
 
 MIT.
+
+<!-- webhook-autodeploy verification: 2026-07-12T14:23:58Z no-op, safe to remove -->

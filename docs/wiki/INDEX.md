@@ -22,5 +22,5 @@ Total topics: 5 | Total sources: 32
 
 ## Recent Changes
 
-- 2026-07-11: Product renamed stolperstein → stolperfalle across all topics/concepts (README/CLAUDE/USING/docs/cq-extensions/openspec/specs sources all updated). Wire-protocol namespace (`stolperfalle:*` keys) and the historical `stolperstein-mvp-scaffold` change citations intentionally left unchanged — see `openspec/changes/rename-product-name/`. No new topics/concepts; same 5/2/32.
+- 2026-07-11: Product renamed stolperstein → stolperfalle across all topics/concepts (README/CLAUDE/USING/docs/cq-extensions/openspec/specs sources all updated). Wire-protocol namespace (`stolperfalle:*` keys) and the historical `stolperstein-mvp-scaffold` change citations intentionally left unchanged — see `openspec/changes/archive/2026-07-11-rename-product-name/`. No new topics/concepts; same 5/2/32.
 - 2026-07-07: Initial compilation — 5 topics, 2 concepts, 32 sources scanned (openspec/ + README/CLAUDE/USING + docs/cq-extensions).

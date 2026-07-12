@@ -1,5 +1,5 @@
 [[stack]]
-name = "git-mcp-stolperstein-nebula"
+name = "git-mcp-stolperfalle-nebula"
 description = "Stolperfalle — Experiential knowledge capture MCP server"
 deploy = true
 tags = ["mcp"]
@@ -9,11 +9,27 @@ server_id = "nebula-1"
 git_provider = "github.com"
 repo = "CaseyRo/mcp-stolperfalle"
 branch = "main"
+# The compose project is pinned to the pre-rename name so the existing volumes
+# (git-mcp-stolperstein-nebula_stolperstein-data / _fastmcp-data, holding the DB
+# + signing key) are reused. Do NOT drop this — without it, a fresh deploy would
+# create empty volumes and rotate the install DID. Same continuity exception as
+# the on-disk stolperstein.db/.key filenames and the [[MCP_STOLPERSTEIN_API_KEY]]
+# Komodo variable name (all deliberately kept post product-rename).
+project_name = "git-mcp-stolperstein-nebula"
+poll_for_updates = true
+webhook_enabled = true
+# Mirrors the live stack env. MCP_STOLPERFALLE_API_KEY resolves from the Komodo
+# variable [[MCP_STOLPERSTEIN_API_KEY]] (variable name unchanged; reusing it means
+# the bearer value never rotated). MCP_STOLPERFALLE_PUBLIC_URL comes from the
+# compose default (the new domain). CQ_SIYUAN_* are vestigial (nothing in the code
+# reads them post-cleanup) but kept to match the live block.
 environment = """
-MCP_STOLPERFALLE_API_KEY = [[MCP_STOLPERFALLE_API_KEY]]
-MCP_STOLPERFALLE_PUBLIC_URL = https://mcp-stolperfalle.cdit-dev.de
-CF_ACCESS_CLIENT_SECRET =
-CQ_SIYUAN_URL = http://siyuan:6806
+MCP_STOLPERFALLE_API_KEY = [[MCP_STOLPERSTEIN_API_KEY]]
+CQ_SIYUAN_URL = http://100.89.96.56:6806
 CQ_SIYUAN_TOKEN = [[CQ_SIYUAN_TOKEN]]
 CQ_SIYUAN_NOTEBOOK = Stolpersteine
+CQ_LLM_API_URL = https://api.openai.com/v1
+CQ_LLM_API_KEY = [[CQ_LLM_API_KEY]]
+CQ_LLM_MODEL = gpt-4o-mini
+CQ_EMBEDDING_MODEL = all-MiniLM-L6-v2
 """
